@@ -1,0 +1,41 @@
+# PostgreSQL Service for Project Sentinel
+# This ClusterIP service exposes the PostgreSQL database within the Kubernetes cluster
+# allowing other services to connect to the database using the service name as hostname
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: default
+  labels:
+    app: postgres
+    component: database
+    project: sentinel
+  annotations:
+    # Service description for documentation purposes
+    description: "PostgreSQL database service for Project Sentinel OSINT system"
+    # Managed by annotation for operational tracking
+    managed-by: "project-sentinel-devops"
+spec:
+  # ClusterIP type makes the service accessible only within the cluster
+  # This provides an additional security layer for the database
+  type: ClusterIP
+  
+  # Service port configuration
+  ports:
+  - name: postgres
+    # Port exposed by the service (what other services connect to)
+    port: 5432
+    # Target port on the PostgreSQL container
+    targetPort: 5432
+    # Protocol used for the connection
+    protocol: TCP
+  
+  # Selector to identify the PostgreSQL pods
+  # This must match the labels defined in the deployment template
+  selector:
+    app: postgres
+  
+  # Session affinity ensures consistent connections to the same pod
+  # For databases, this helps maintain connection pools and transactions
+  sessionAffinity: None

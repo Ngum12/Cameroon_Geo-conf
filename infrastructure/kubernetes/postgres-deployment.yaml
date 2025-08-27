@@ -1,0 +1,141 @@
+# PostgreSQL 15 Deployment for Project Sentinel
+# This deployment creates a PostgreSQL database instance with persistent storage
+# for the Cameroon Defense Force OSINT analysis system.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+  namespace: default
+  labels:
+    app: postgres
+    component: database
+    project: sentinel
+spec:
+  # Single replica for database consistency
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  
+  # Deployment strategy - Recreate ensures only one instance runs at a time
+  strategy:
+    type: Recreate
+  
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+        project: sentinel
+    spec:
+      containers:
+      - name: postgres
+        # Official PostgreSQL 15 image from Docker Hub
+        image: postgres:15
+        imagePullPolicy: IfNotPresent
+        
+        # Container port configuration
+        ports:
+        - containerPort: 5432
+          name: postgres
+          protocol: TCP
+        
+        # Environment variables sourced from Kubernetes secret
+        # This ensures sensitive database credentials are securely managed
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        
+        # Resource constraints to ensure performance and prevent resource exhaustion
+        resources:
+          limits:
+            cpu: "2"          # Maximum 2 CPU cores
+            memory: "4Gi"     # Maximum 4GB RAM
+          requests:
+            cpu: "1"          # Minimum 1 CPU core
+            memory: "2Gi"     # Minimum 2GB RAM
+        
+        # Volume mount for persistent data storage
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+          # Subpath ensures PostgreSQL data is stored in a subdirectory
+          subPath: postgres
+        
+        # Liveness probe to check if PostgreSQL is running
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -d
+            - $(POSTGRES_DB)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe to check if PostgreSQL is ready to accept connections
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - $(POSTGRES_USER)
+            - -d
+            - $(POSTGRES_DB)
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+      
+      # Volume configuration for persistent storage
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+# Persistent Volume Claim for PostgreSQL data storage
+# This ensures data persistence across pod restarts and deployments
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: default
+  labels:
+    app: postgres
+    component: database
+    project: sentinel
+spec:
+  # Access mode - ReadWriteOnce allows mounting by a single node
+  accessModes:
+    - ReadWriteOnce
+  
+  # Storage class - uses default storage class if not specified
+  # storageClassName: standard  # Uncomment and modify for specific storage class
+  
+  # Requested storage capacity
+  resources:
+    requests:
+      storage: 100Gi
+  
+  # Volume mode - Filesystem for database files
+  volumeMode: Filesystem
