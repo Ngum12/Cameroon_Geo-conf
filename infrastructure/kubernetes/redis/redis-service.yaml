@@ -1,0 +1,21 @@
+# Redis Service for Project Sentinel
+# ClusterIP service to expose Redis within the cluster
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: sentinel-prod
+  labels:
+    app: redis
+    component: cache
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  selector:
+    app: redis

@@ -1,0 +1,158 @@
+# Named Entity Recognition Service Kubernetes Deployment
+# Production deployment for XLM-RoBERTa NER service
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ner-service
+  namespace: sentinel-prod
+  labels:
+    app: ner-service
+    component: nlp
+    project: sentinel
+    version: prod
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ner-service
+  template:
+    metadata:
+      labels:
+        app: ner-service
+        component: nlp
+        project: sentinel
+        version: prod
+    spec:
+      containers:
+      - name: ner-service
+        image: registry.cdf.cm/sentinel/ner:prod
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MODEL_NAME
+          value: "xlm-roberta-large-finetuned-conll03-english"
+        - name: MAX_WORKERS
+          value: "4"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: BATCH_SIZE
+          value: "8"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "6Gi"
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: "1"
+            memory: "3Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/.cache
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: ner-model-pvc
+      - name: tmp-volume
+        emptyDir: {}
+      imagePullSecrets:
+      - name: registry-credentials
+      nodeSelector:
+        workload-type: nlp
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ner-service
+  namespace: sentinel-prod
+  labels:
+    app: ner-service
+    component: nlp
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: ner-service
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ner-model-pvc
+  namespace: sentinel-prod
+  labels:
+    app: ner-service
+    component: nlp
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ner-service-hpa
+  namespace: sentinel-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ner-service
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
