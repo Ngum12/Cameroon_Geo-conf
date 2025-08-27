@@ -1,0 +1,137 @@
+# Network Policy for Frontend Dashboard
+# Allows only necessary traffic for React dashboard served via Nginx
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-dashboard-policy
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    project: sentinel
+    security-policy: "frontend-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend-dashboard
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Allow health check probes
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Allow monitoring traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  egress:
+  # Allow access to backend API for proxy requests
+  - to:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow HTTPS access to Mapbox APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP access for CDN resources
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy for Data Ingestion Services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-ingestion-policy
+  namespace: sentinel-prod
+  labels:
+    app: data-ingestion
+    project: sentinel
+    security-policy: "ingestion-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: data-ingestion
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow monitoring traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  egress:
+  # Allow access to backend API (to submit data)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access to Redis (for job queuing)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow HTTPS access to external news sources
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP access to external news sources
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Allow access to RSS feeds on custom ports
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8000

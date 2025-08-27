@@ -1,0 +1,369 @@
+# Prometheus Alerting Rules for Project Sentinel
+# Comprehensive alerting for security, performance, and availability
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: rules
+    project: sentinel
+data:
+  sentinel-alerts.yml: |
+    groups:
+    # Critical System Alerts
+    - name: sentinel.critical
+      interval: 30s
+      rules:
+      
+      # Service availability alerts
+      - alert: SentinelServiceDown
+        expr: up{job=~"sentinel-.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+          project: sentinel
+        annotations:
+          summary: "Project Sentinel service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} in namespace {{ $labels.namespace }} has been down for more than 2 minutes."
+          runbook_url: "https://docs.sentinel.cdf.cm/runbooks/service-down"
+          
+      - alert: SentinelPodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace="sentinel-prod"}[15m]) * 60 * 15 > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: stability
+          project: sentinel
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 15 minutes."
+          runbook_url: "https://docs.sentinel.cdf.cm/runbooks/pod-crashloop"
+      
+      # Database alerts
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+          project: sentinel
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database for Project Sentinel has been unreachable for more than 1 minute."
+          runbook_url: "https://docs.sentinel.cdf.cm/runbooks/postgres-down"
+          
+      - alert: PostgreSQLTooManyConnections
+        expr: sum(pg_stat_activity_count) BY (instance) > sum(pg_settings_max_connections) BY (instance) * 0.8
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+          project: sentinel
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "PostgreSQL instance {{ $labels.instance }} has {{ $value }} connections (>80% of max)."
+      
+      # Redis alerts
+      - alert: RedisDown
+        expr: up{job="redis-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: cache
+          project: sentinel
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis instance for Project Sentinel has been unreachable for more than 1 minute."
+          
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          category: cache
+          project: sentinel
+        annotations:
+          summary: "Redis memory usage is critical"
+          description: "Redis memory usage is above 90% on {{ $labels.instance }}."
+    
+    # High Priority Alerts
+    - name: sentinel.high
+      interval: 60s
+      rules:
+      
+      # Performance alerts
+      - alert: SentinelAPIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="sentinel-backend-api"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+          project: sentinel
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile latency for {{ $labels.method }} {{ $labels.endpoint }} is {{ $value }}s"
+          
+      - alert: SentinelAPIHighErrorRate
+        expr: rate(http_requests_total{job="sentinel-backend-api",status=~"5.."}[5m]) / rate(http_requests_total{job="sentinel-backend-api"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+          project: sentinel
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+          
+      # Resource utilization
+      - alert: SentinelHighCPUUsage
+        expr: (100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          project: sentinel
+        annotations:
+          summary: "High CPU usage on node {{ $labels.instance }}"
+          description: "CPU usage has been above 80% for more than 10 minutes"
+          
+      - alert: SentinelHighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          project: sentinel
+        annotations:
+          summary: "High memory usage on node {{ $labels.instance }}"
+          description: "Memory usage has been above 85% for more than 10 minutes"
+          
+      # Disk space alerts
+      - alert: SentinelDiskSpaceHigh
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          project: sentinel
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk usage on {{ $labels.mountpoint }} is {{ $value | humanizePercentage }}"
+          
+      # NLP services specific alerts
+      - alert: TranslationServiceSlow
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="sentinel-nlp-services",service="translation"}[10m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: nlp
+          project: sentinel
+        annotations:
+          summary: "Translation service is slow"
+          description: "95th percentile response time for translation service is {{ $value }}s"
+          
+      - alert: NERServiceSlow
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="sentinel-nlp-services",service="ner"}[10m])) > 15
+        for: 5m
+        labels:
+          severity: warning
+          category: nlp
+          project: sentinel
+        annotations:
+          summary: "NER service is slow"
+          description: "95th percentile response time for NER service is {{ $value }}s"
+    
+    # Security Alerts
+    - name: sentinel.security
+      interval: 30s
+      rules:
+      
+      - alert: SentinelUnauthorizedAccess
+        expr: increase(nginx_ingress_controller_requests{status=~"401|403"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          category: security
+          project: sentinel
+        annotations:
+          summary: "Multiple unauthorized access attempts"
+          description: "{{ $value }} unauthorized access attempts in the last 5 minutes"
+          
+      - alert: SentinelHighFailedLogins
+        expr: increase(django_auth_failed_attempts_total[10m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+          category: security
+          project: sentinel
+        annotations:
+          summary: "High number of failed login attempts"
+          description: "{{ $value }} failed login attempts in the last 10 minutes"
+          
+      - alert: SentinelPodSecurityViolation
+        expr: increase(falco_events{rule_type="security"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: security
+          project: sentinel
+        annotations:
+          summary: "Security policy violation detected"
+          description: "Falco detected {{ $value }} security violations in the last 5 minutes"
+    
+    # Data Processing Alerts
+    - name: sentinel.data
+      interval: 120s
+      rules:
+      
+      - alert: SentinelDataIngestionStalled
+        expr: increase(articles_processed_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          category: data
+          project: sentinel
+        annotations:
+          summary: "Data ingestion appears stalled"
+          description: "No articles have been processed in the last 30 minutes"
+          
+      - alert: SentinelHighDataIngestionErrors
+        expr: rate(data_ingestion_errors_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          category: data
+          project: sentinel
+        annotations:
+          summary: "High data ingestion error rate"
+          description: "Data ingestion error rate is {{ $value }} errors per second"
+          
+      - alert: SentinelCeleryQueueBacklog
+        expr: celery_queue_length{queue="default"} > 1000
+        for: 15m
+        labels:
+          severity: warning
+          category: processing
+          project: sentinel
+        annotations:
+          summary: "Large Celery queue backlog"
+          description: "Celery queue {{ $labels.queue }} has {{ $value }} pending tasks"
+          
+      - alert: SentinelCeleryWorkerDown
+        expr: up{job="celery-worker"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: processing
+          project: sentinel
+        annotations:
+          summary: "Celery worker is down"
+          description: "Celery worker {{ $labels.instance }} has been down for more than 5 minutes"
+    
+    # Storage and Backup Alerts  
+    - name: sentinel.storage
+      interval: 300s
+      rules:
+      
+      - alert: SentinelBackupFailed
+        expr: time() - backup_last_success_timestamp > 86400
+        for: 1m
+        labels:
+          severity: warning
+          category: backup
+          project: sentinel
+        annotations:
+          summary: "Backup has not run successfully"
+          description: "Last successful backup was more than 24 hours ago"
+          
+      - alert: SentinelPVCUsageHigh
+        expr: (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          category: storage
+          project: sentinel
+        annotations:
+          summary: "PVC usage is high"
+          description: "PVC {{ $labels.persistentvolumeclaim }} usage is {{ $value | humanizePercentage }}"
+    
+    # Network and Connectivity Alerts
+    - name: sentinel.network
+      interval: 60s
+      rules:
+      
+      - alert: SentinelNetworkPolicyViolation
+        expr: increase(network_policy_dropped_packets_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          category: network
+          project: sentinel
+        annotations:
+          summary: "Network policy violations detected"
+          description: "{{ $value }} packets were dropped due to network policy violations"
+          
+      - alert: SentinelExternalConnectivityIssue
+        expr: probe_success{job="blackbox-exporter"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: connectivity
+          project: sentinel
+        annotations:
+          summary: "External connectivity issue"
+          description: "Cannot reach external service {{ $labels.instance }}"
+          
+      - alert: SentinelIngressDown
+        expr: up{job="nginx-ingress"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: connectivity
+          project: sentinel
+        annotations:
+          summary: "Ingress controller is down"
+          description: "Nginx ingress controller has been down for more than 2 minutes"
+
+  # Kubernetes cluster health rules
+  k8s-cluster.yml: |
+    groups:
+    - name: kubernetes.cluster
+      interval: 60s
+      rules:
+      
+      - alert: KubernetesNodeReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: cluster
+          project: sentinel
+        annotations:
+          summary: "Kubernetes node not ready"
+          description: "Node {{ $labels.node }} has been unready for more than 5 minutes"
+          
+      - alert: KubernetesPodNotReady
+        expr: kube_pod_status_phase{namespace="sentinel-prod",phase=~"Pending|Unknown"} > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: cluster
+          project: sentinel
+        annotations:
+          summary: "Pod not ready"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for more than 10 minutes"
+          
+      - alert: KubernetesAPIServerDown
+        expr: up{job="kubernetes-apiservers"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: cluster
+          project: sentinel
+        annotations:
+          summary: "Kubernetes API server is down"
+          description: "Kubernetes API server has been unreachable for more than 1 minute"

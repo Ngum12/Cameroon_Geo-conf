@@ -1,0 +1,157 @@
+# Network Policy for Database Services
+# Restricts database access to only authorized backend services
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-policy
+  namespace: sentinel-prod
+  labels:
+    app: postgres
+    project: sentinel
+    security-policy: "database-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow access from backend API
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access from Celery workers
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access from Celery beat scheduler
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-beat
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access from backup jobs
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backup-job
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow monitoring from Prometheus PostgreSQL exporter
+  - from:
+    - podSelector:
+        matchLabels:
+          app: postgres-exporter
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow administrative access (for maintenance)
+  - from:
+    - podSelector:
+        matchLabels:
+          role: database-admin
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  egress:
+  # PostgreSQL typically doesn't need outbound connections
+  # Allow DNS for replication or external auth if needed
+  []
+
+---
+# Network Policy for Redis Cache
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-policy
+  namespace: sentinel-prod
+  labels:
+    app: redis
+    project: sentinel
+    security-policy: "cache-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow access from backend API (for caching)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access from Celery workers (message broker)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access from Celery beat scheduler
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-beat
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access from Celery flower monitoring
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-flower
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access from data ingestion services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: data-ingestion
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow monitoring from Redis exporter
+  - from:
+    - podSelector:
+        matchLabels:
+          app: redis-exporter
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  egress:
+  # Redis typically doesn't need outbound connections
+  []

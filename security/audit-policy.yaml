@@ -1,0 +1,380 @@
+# Kubernetes Audit Policy for Project Sentinel
+# Comprehensive logging of security-relevant events
+
+apiVersion: audit.k8s.io/v1
+kind: Policy
+metadata:
+  name: sentinel-audit-policy
+  labels:
+    project: sentinel
+    security-policy: "audit-logging"
+rules:
+# Log all security-critical operations at RequestResponse level
+- level: RequestResponse
+  resources:
+  # Authentication and authorization
+  - group: ""
+    resources: ["secrets", "serviceaccounts"]
+  - group: "rbac.authorization.k8s.io"
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  # Pod security
+  - group: "policy"
+    resources: ["podsecuritypolicies"]
+  - group: "networking.k8s.io"
+    resources: ["networkpolicies"]
+  # Certificate management
+  - group: "cert-manager.io"
+    resources: ["certificates", "issuers", "clusterissuers"]
+
+# Log all requests to sensitive namespaces
+- level: Request
+  namespaces: ["sentinel-prod", "kube-system", "cert-manager"]
+  resources:
+  - group: ""
+    resources: ["pods", "services", "configmaps"]
+  - group: "apps"
+    resources: ["deployments", "daemonsets", "statefulsets"]
+
+# Log all create, update, delete operations in Project Sentinel namespace
+- level: Metadata
+  namespaces: ["sentinel-prod"]
+  verbs: ["create", "update", "patch", "delete"]
+  resources:
+  - group: ""
+  - group: "apps"
+  - group: "extensions"
+  - group: "networking.k8s.io"
+
+# Log failed requests
+- level: Request
+  verbs: ["create", "update", "patch", "delete"]
+  resources:
+  - group: ""
+  - group: "apps"
+  - group: "extensions"
+  omitStages:
+  - RequestReceived
+  # Only log failed requests
+  namespaceSelector:
+    matchLabels:
+      name: "sentinel-prod"
+
+# Log exec and attach operations (potential security risk)
+- level: RequestResponse
+  verbs: ["create"]
+  resources:
+  - group: ""
+    resources: ["pods/exec", "pods/attach", "pods/portforward"]
+
+# Log access to sensitive ConfigMaps and Secrets
+- level: Metadata
+  resources:
+  - group: ""
+    resources: ["secrets", "configmaps"]
+  verbs: ["get", "list", "watch"]
+  namespaces: ["sentinel-prod"]
+
+# Don't log requests to certain non-sensitive resources
+- level: None
+  resources:
+  - group: ""
+    resources: ["events"]
+  - group: "metrics.k8s.io"
+  - group: "node.k8s.io"
+
+# Don't log watch requests for performance
+- level: None
+  verbs: ["watch"]
+
+# Catch-all rule for other requests
+- level: Metadata
+  omitStages:
+  - RequestReceived
+
+---
+# Falco Rules for Runtime Security Monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falco-rules-sentinel
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "runtime-monitoring"
+data:
+  sentinel_rules.yaml: |
+    # Project Sentinel specific security rules
+    
+    # Detect unauthorized access to sensitive directories
+    - rule: Unauthorized access to database config
+      desc: Detect access to PostgreSQL configuration files
+      condition: >
+        open_read and container and
+        (fd.filename startswith "/var/lib/postgresql/data" or
+         fd.filename contains "postgresql.conf" or
+         fd.filename contains "pg_hba.conf") and
+        not proc.name in (postgres, initdb, pg_ctl)
+      output: >
+        Unauthorized access to PostgreSQL config
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name)
+      priority: ERROR
+      tags: [database, config, unauthorized_access]
+    
+    # Detect suspicious network connections
+    - rule: Unexpected outbound connections from backend
+      desc: Detect unexpected network connections from backend services
+      condition: >
+        outbound and container and
+        k8s.pod.label.app=backend-api and
+        not fd.sip in (postgresql_service_ips, redis_service_ips, nlp_service_ips) and
+        not fd.sport in (80, 443, 53)
+      output: >
+        Unexpected outbound connection from backend
+        (user=%user.name command=%proc.cmdline connection=%fd.name container=%container.name)
+      priority: WARNING
+      tags: [network, backend, suspicious]
+    
+    # Detect privilege escalation attempts
+    - rule: Privilege escalation in sentinel containers
+      desc: Detect potential privilege escalation in Project Sentinel containers
+      condition: >
+        spawned_process and container and
+        k8s.ns.name=sentinel-prod and
+        (proc.name in (su, sudo, doas) or
+         proc.name startswith "sudo" or
+         proc.name startswith "su ")
+      output: >
+        Privilege escalation attempt detected
+        (user=%user.name command=%proc.cmdline container=%container.name pod=%k8s.pod.name)
+      priority: CRITICAL
+      tags: [privilege_escalation, container, critical]
+    
+    # Detect file system modifications in production
+    - rule: Unauthorized file modifications in containers
+      desc: Detect unauthorized modifications to application files
+      condition: >
+        open_write and container and
+        k8s.ns.name=sentinel-prod and
+        (fd.filename startswith "/app/" or
+         fd.filename startswith "/usr/local/" or
+         fd.filename startswith "/etc/") and
+        not proc.name in (npm, pip, apt, apt-get, dpkg, python, python3, node)
+      output: >
+        Unauthorized file modification in container
+        (user=%user.name command=%proc.cmdline file=%fd.name container=%container.name)
+      priority: ERROR
+      tags: [filesystem, modification, unauthorized]
+    
+    # Detect crypto mining activities
+    - rule: Crypto mining detection
+      desc: Detect potential cryptocurrency mining activities
+      condition: >
+        spawned_process and
+        (proc.name in (xmrig, cpuminer, minerd, cgminer, bfgminer) or
+         proc.cmdline contains "stratum+tcp" or
+         proc.cmdline contains "mining" or
+         proc.cmdline contains "cryptonight")
+      output: >
+        Potential crypto mining activity detected
+        (user=%user.name command=%proc.cmdline container=%container.name)
+      priority: CRITICAL
+      tags: [crypto_mining, malware, critical]
+    
+    # Monitor container exec operations
+    - rule: Container exec operations
+      desc: Monitor all exec operations in sentinel containers
+      condition: >
+        k8s_audit and ka.verb=create and
+        ka.uri.resource=pods and ka.uri.subresource=exec and
+        k8s.ns.name=sentinel-prod
+      output: >
+        Exec operation in sentinel container
+        (user=%ka.user.name pod=%ka.target.pod container=%ka.target.container command=%ka.req.pod.containers.command)
+      priority: WARNING
+      tags: [exec, container, audit]
+
+---
+# Security Scanning Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-scan-config
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "vulnerability-scanning"
+data:
+  scan-policy.yaml: |
+    # Trivy vulnerability scanning configuration
+    scan:
+      # Scan schedule (daily at 02:00 UTC)
+      schedule: "0 2 * * *"
+      
+      # Severity levels to report
+      severity:
+        - CRITICAL
+        - HIGH
+        - MEDIUM
+      
+      # Image repositories to scan
+      repositories:
+        - "registry.cdf.cm/sentinel/backend:prod"
+        - "registry.cdf.cm/sentinel/frontend:prod"
+        - "registry.cdf.cm/sentinel/translation:prod"
+        - "registry.cdf.cm/sentinel/ner:prod"
+        - "registry.cdf.cm/sentinel/ingestion:prod"
+      
+      # Compliance frameworks
+      compliance:
+        - "ISO-27001"
+        - "CIS-Kubernetes"
+      
+      # Output configuration
+      output:
+        formats:
+          - json
+          - sarif
+        destinations:
+          - s3://sentinel-security-reports/vulnerability-scans/
+          - siem://siem.cdf.cm/vulnerability-reports
+      
+      # Notification settings
+      notifications:
+        critical:
+          email: security@cdf.cm
+          slack: "#security-alerts"
+        high:
+          email: operations@cdf.cm
+
+---
+# Compliance and Audit Job
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: security-compliance-audit
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "compliance-audit"
+spec:
+  schedule: "0 6 * * 1"  # Weekly on Monday at 06:00 UTC
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: security-audit-sa
+          containers:
+          - name: compliance-auditor
+            image: registry.cdf.cm/security/compliance-auditor:latest
+            imagePullPolicy: Always
+            env:
+            - name: NAMESPACE
+              value: "sentinel-prod"
+            - name: COMPLIANCE_FRAMEWORKS
+              value: "ISO-27001,CIS-Kubernetes,NIST-CSF"
+            - name: OUTPUT_S3_BUCKET
+              value: "sentinel-compliance-reports"
+            - name: REPORT_EMAIL
+              value: "compliance@cdf.cm"
+            command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Starting Project Sentinel compliance audit..."
+              
+              # Run CIS Kubernetes benchmark
+              kube-bench run --targets master,node,etcd,policies --json > /tmp/cis-benchmark.json
+              
+              # Run Polaris configuration validation
+              polaris audit --output-file /tmp/polaris-report.json
+              
+              # Custom compliance checks
+              /usr/local/bin/sentinel-compliance-checker \
+                --namespace sentinel-prod \
+                --framework ISO-27001 \
+                --output /tmp/iso27001-report.json
+              
+              # Upload reports to S3
+              aws s3 cp /tmp/ s3://${OUTPUT_S3_BUCKET}/$(date +%Y/%m/%d)/ --recursive
+              
+              # Send summary email
+              /usr/local/bin/send-compliance-summary \
+                --email ${REPORT_EMAIL} \
+                --reports /tmp/*.json
+              
+              echo "Compliance audit completed successfully"
+            resources:
+              limits:
+                cpu: "500m"
+                memory: "512Mi"
+              requests:
+                cpu: "200m"
+                memory: "256Mi"
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1001
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
+          restartPolicy: OnFailure
+          nodeSelector:
+            workload-type: "security"
+
+---
+# Service Account for Security Operations
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: security-audit-sa
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-role: "auditor"
+
+---
+# Role for security audit operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: security-auditor-role
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-role: "auditor"
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+  verbs: ["get", "list"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies", "ingresses"]
+  verbs: ["get", "list"]
+- apiGroups: ["policy"]
+  resources: ["podsecuritypolicies"]
+  verbs: ["get", "list"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings"]
+  verbs: ["get", "list"]
+
+---
+# RoleBinding for security audit
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: security-auditor-binding
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-role: "auditor"
+subjects:
+- kind: ServiceAccount
+  name: security-audit-sa
+  namespace: sentinel-prod
+roleRef:
+  kind: Role
+  name: security-auditor-role
+  apiGroup: rbac.authorization.k8s.io

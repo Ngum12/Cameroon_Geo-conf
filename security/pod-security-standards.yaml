@@ -1,0 +1,291 @@
+# Pod Security Standards for Project Sentinel
+# Implements restricted security policies for production deployment
+
+# Namespace-level Pod Security Standards
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel-prod
+  labels:
+    # Pod Security Standards labels
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    
+    # Project labels
+    project: sentinel
+    environment: production
+    classification: restricted
+
+---
+# Security Context Constraints for OpenShift (if applicable)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: sentinel-restricted-scc
+  labels:
+    project: sentinel
+    security-policy: "restricted"
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+allowedFlexVolumes: []
+defaultAddCapabilities: []
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 65535
+priority: null
+readOnlyRootFilesystem: false
+requiredDropCapabilities:
+- ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+    max: 65535
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+
+---
+# Pod Security Policy (for clusters that still support it)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: sentinel-restricted-psp
+  labels:
+    project: sentinel
+    security-policy: "restricted"
+spec:
+  # Security requirements
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  
+  # Volume restrictions
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  
+  # Host restrictions
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  hostPorts:
+  - min: 0
+    max: 0
+  
+  # User and group restrictions
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  runAsGroup:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 65535
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+    - min: 1000
+      max: 65535
+  
+  # SELinux
+  seLinux:
+    rule: 'RunAsAny'
+  
+  # Read-only root filesystem
+  readOnlyRootFilesystem: false  # Some containers need to write to temp dirs
+  
+  # Allowed unsafe sysctls
+  allowedUnsafeSysctls: []
+  
+  # Forbidden sysctls
+  forbiddenSysctls:
+  - '*'
+
+---
+# ClusterRole for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel-psp-user
+  labels:
+    project: sentinel
+    security-policy: "psp-rbac"
+rules:
+- apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+  resourceNames:
+  - sentinel-restricted-psp
+
+---
+# ClusterRoleBinding for Pod Security Policy
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sentinel-psp-binding
+  labels:
+    project: sentinel
+    security-policy: "psp-rbac"
+roleRef:
+  kind: ClusterRole
+  name: sentinel-psp-user
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+# Apply to all service accounts in sentinel-prod namespace
+- kind: Group
+  name: system:serviceaccounts:sentinel-prod
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Service Account for Backend API with restricted permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-api-sa
+  namespace: sentinel-prod
+  labels:
+    app: backend-api
+    project: sentinel
+
+---
+# Service Account for NLP Services
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nlp-services-sa
+  namespace: sentinel-prod
+  labels:
+    app: nlp-services
+    project: sentinel
+
+---
+# Service Account for Frontend Dashboard
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-dashboard-sa
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    project: sentinel
+
+---
+# Service Account for Data Ingestion
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-ingestion-sa
+  namespace: sentinel-prod
+  labels:
+    app: data-ingestion
+    project: sentinel
+
+---
+# Role for Backend API operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-api-role
+  namespace: sentinel-prod
+  labels:
+    app: backend-api
+    project: sentinel
+rules:
+# Allow reading ConfigMaps and Secrets
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+# Allow reading pod information for health checks
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+# Allow creating events for logging
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# RoleBinding for Backend API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-api-binding
+  namespace: sentinel-prod
+  labels:
+    app: backend-api
+    project: sentinel
+subjects:
+- kind: ServiceAccount
+  name: backend-api-sa
+  namespace: sentinel-prod
+roleRef:
+  kind: Role
+  name: backend-api-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role for Data Ingestion services
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: data-ingestion-role
+  namespace: sentinel-prod
+  labels:
+    app: data-ingestion
+    project: sentinel
+rules:
+# Minimal permissions for data ingestion
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# RoleBinding for Data Ingestion
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: data-ingestion-binding
+  namespace: sentinel-prod
+  labels:
+    app: data-ingestion
+    project: sentinel
+subjects:
+- kind: ServiceAccount
+  name: data-ingestion-sa
+  namespace: sentinel-prod
+roleRef:
+  kind: Role
+  name: data-ingestion-role
+  apiGroup: rbac.authorization.k8s.io

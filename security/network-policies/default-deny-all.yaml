@@ -1,0 +1,88 @@
+# Default Deny All Network Policy for Project Sentinel
+# Implements zero-trust networking by denying all traffic by default
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "zero-trust"
+spec:
+  # Apply to all pods in the namespace
+  podSelector: {}
+  
+  # Deny all ingress and egress traffic by default
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Empty ingress and egress rules = deny all
+  ingress: []
+  egress: []
+
+---
+# Allow DNS resolution for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "dns-resolution"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS queries to kube-dns
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow DNS queries to coredns
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: coredns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Allow Kubernetes API access for service discovery
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kubernetes-api
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "k8s-api-access"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Allow HTTPS access to Kubernetes API server
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 6443
+    - protocol: TCP
+      port: 443

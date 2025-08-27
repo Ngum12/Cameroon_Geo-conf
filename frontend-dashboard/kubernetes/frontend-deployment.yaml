@@ -1,0 +1,402 @@
+# Frontend Dashboard Deployment for Project Sentinel
+# React SPA served via Nginx with production optimizations
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-dashboard
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+    version: prod
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend-dashboard
+  template:
+    metadata:
+      labels:
+        app: frontend-dashboard
+        component: frontend
+        project: sentinel
+        version: prod
+    spec:
+      containers:
+      - name: frontend-dashboard
+        image: registry.cdf.cm/sentinel/frontend:prod
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        env:
+        # Frontend Configuration
+        - name: VITE_API_BASE_URL
+          value: "https://api.sentinel.cdf.cm"
+        - name: VITE_MAPBOX_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: mapbox-secret
+              key: token
+        - name: VITE_APP_VERSION
+          value: "1.0.0"
+        - name: VITE_BUILD_ENV
+          value: "production"
+        - name: VITE_APP_TITLE
+          value: "Project Sentinel - Cameroon Defense Force"
+        
+        # Nginx Configuration
+        - name: NGINX_WORKER_PROCESSES
+          value: "auto"
+        - name: NGINX_WORKER_CONNECTIONS
+          value: "1024"
+        - name: NGINX_CLIENT_MAX_BODY_SIZE
+          value: "16M"
+        
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+            
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            httpHeaders:
+            - name: Host
+              value: "sentinel.cdf.cm"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+            httpHeaders:
+            - name: Host
+              value: "sentinel.cdf.cm"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+          
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+        - name: tmp-volume
+          mountPath: /tmp
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 101  # nginx user
+          runAsGroup: 101 # nginx group
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE  # Allow binding to port 80
+            
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-logs
+        persistentVolumeClaim:
+          claimName: frontend-logs-pvc
+      - name: tmp-volume
+        emptyDir: {}
+        
+      imagePullSecrets:
+      - name: registry-credentials
+      
+      # Node selection for frontend workloads
+      nodeSelector:
+        workload-type: frontend
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-dashboard-service
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: frontend-dashboard
+
+---
+# Persistent Volume Claim for Frontend Logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: frontend-logs-pvc
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: shared-storage
+
+---
+# Horizontal Pod Autoscaler for Frontend
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-dashboard-hpa
+  namespace: sentinel-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend-dashboard
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# ConfigMap for Custom Nginx Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-config
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+data:
+  default.conf: |
+    # Project Sentinel Frontend Configuration
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name sentinel.cdf.cm _;
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+        
+        # CSP for Mapbox and API access
+        add_header Content-Security-Policy "
+            default-src 'self';
+            script-src 'self' 'unsafe-inline' 'unsafe-eval' 
+                https://api.mapbox.com 
+                https://events.mapbox.com;
+            style-src 'self' 'unsafe-inline' 
+                https://fonts.googleapis.com 
+                https://api.mapbox.com;
+            font-src 'self' 
+                https://fonts.gstatic.com 
+                https://api.mapbox.com;
+            img-src 'self' data: https: blob: 
+                https://api.mapbox.com 
+                https://*.tiles.mapbox.com;
+            connect-src 'self' 
+                https://api.mapbox.com 
+                https://events.mapbox.com 
+                wss: 
+                https://api.sentinel.cdf.cm;
+            worker-src 'self' blob:;
+            child-src blob:;
+            object-src 'none';
+            base-uri 'self';
+            form-action 'self';
+        " always;
+        
+        # Root and index
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types
+            application/json
+            application/javascript
+            application/xml+rss
+            application/xml
+            image/svg+xml
+            text/css
+            text/javascript
+            text/xml
+            text/plain;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            add_header Vary "Accept-Encoding";
+            access_log off;
+        }
+        
+        # Cache HTML with shorter duration
+        location ~* \.html$ {
+            expires 1h;
+            add_header Cache-Control "public, must-revalidate";
+            add_header Vary "Accept-Encoding";
+        }
+        
+        # API proxy with rate limiting
+        location /api/ {
+            proxy_pass https://backend-api-service.sentinel-prod.svc.cluster.local:8000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+            proxy_read_timeout 90s;
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 90s;
+        }
+        
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # Metrics endpoint
+        location /metrics {
+            access_log off;
+            return 200 "# HELP nginx_up Whether nginx is up\n# TYPE nginx_up gauge\nnginx_up 1\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # Main application - handle React Router
+        location / {
+            try_files $uri $uri/ @fallback;
+            
+            # Security headers
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+        }
+        
+        # Fallback for React Router
+        location @fallback {
+            rewrite ^.*$ /index.html last;
+        }
+        
+        # Block access to sensitive files
+        location ~ /\. {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+        
+        location ~ ~$ {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+        
+        # Error pages
+        error_page 404 /index.html;
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root /usr/share/nginx/html;
+        }
+    }
+  
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log notice;
+    pid /var/run/nginx.pid;
+    
+    events {
+        worker_connections 1024;
+        use epoll;
+        multi_accept on;
+    }
+    
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        # Logging
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+        
+        access_log /var/log/nginx/access.log main;
+        
+        # Performance
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        client_max_body_size 16M;
+        
+        # Security
+        server_tokens off;
+        
+        # Include server configs
+        include /etc/nginx/conf.d/*.conf;
+    }

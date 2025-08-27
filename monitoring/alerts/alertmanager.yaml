@@ -1,0 +1,446 @@
+# Alertmanager Configuration for Project Sentinel
+# Handles alert routing, grouping, and notifications
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: alerting
+    project: sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        component: alerting
+        project: sentinel
+    spec:
+      serviceAccountName: alertmanager-sa
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9093
+          name: http
+          protocol: TCP
+        args:
+        - --config.file=/etc/alertmanager/config.yml
+        - --storage.path=/alertmanager/data
+        - --web.external-url=https://alertmanager.sentinel.cdf.cm
+        - --web.route-prefix=/
+        - --cluster.listen-address=0.0.0.0:9094
+        - --log.level=info
+        
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+              
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+            
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9093
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+          
+        volumeMounts:
+        - name: alertmanager-config
+          mountPath: /etc/alertmanager
+        - name: alertmanager-storage
+          mountPath: /alertmanager/data
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534  # nobody user
+          runAsGroup: 65534
+          fsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+            
+      # Init container for proper permissions
+      initContainers:
+      - name: init-alertmanager
+        image: busybox:1.36
+        command: ['sh', '-c']
+        args:
+        - |
+          chown -R 65534:65534 /alertmanager/data
+          chmod -R 755 /alertmanager/data
+        volumeMounts:
+        - name: alertmanager-storage
+          mountPath: /alertmanager/data
+        securityContext:
+          runAsUser: 0
+          
+      volumes:
+      - name: alertmanager-config
+        configMap:
+          name: alertmanager-config
+      - name: alertmanager-storage
+        persistentVolumeClaim:
+          claimName: alertmanager-storage-pvc
+          
+      nodeSelector:
+        workload-type: "monitoring"
+
+---
+# Alertmanager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: alerting
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  selector:
+    app: alertmanager
+
+---
+# Alertmanager Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-storage-pvc
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: storage
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# Alertmanager Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    component: config
+    project: sentinel
+data:
+  config.yml: |
+    # Project Sentinel Alertmanager Configuration
+    global:
+      # SMTP configuration for email notifications
+      smtp_smarthost: 'smtp.cdf.cm:587'
+      smtp_from: 'alerts@sentinel.cdf.cm'
+      smtp_auth_username: 'alerts@sentinel.cdf.cm'
+      smtp_auth_password: 'SentinelAlerts2024!'
+      smtp_require_tls: true
+      
+      # Slack configuration
+      slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    
+    # Templates for notifications
+    templates:
+    - '/etc/alertmanager/templates/*.tmpl'
+    
+    # Routing configuration
+    route:
+      group_by: ['alertname', 'severity', 'project']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'default-receiver'
+      
+      routes:
+      # Critical alerts - immediate notification
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 10s
+        repeat_interval: 1h
+        
+      # Security alerts - immediate notification
+      - match:
+          category: security
+        receiver: 'security-team'
+        group_wait: 10s
+        repeat_interval: 30m
+        
+      # Database alerts
+      - match_re:
+          category: (database|cache)
+        receiver: 'database-team'
+        group_wait: 30s
+        repeat_interval: 2h
+        
+      # Performance alerts
+      - match:
+          category: performance
+        receiver: 'performance-team'
+        group_wait: 5m
+        repeat_interval: 4h
+        
+      # Infrastructure alerts
+      - match_re:
+          category: (resources|cluster|network)
+        receiver: 'infrastructure-team'
+        group_wait: 2m
+        repeat_interval: 2h
+    
+    # Alert inhibition rules
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'instance']
+      
+    - source_match:
+        alertname: 'SentinelServiceDown'
+      target_match_re:
+        alertname: 'Sentinel.*'
+      equal: ['instance']
+    
+    # Notification receivers
+    receivers:
+    
+    # Default receiver for unmatched alerts
+    - name: 'default-receiver'
+      email_configs:
+      - to: 'operations@cdf.cm'
+        subject: '[Sentinel] {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Dashboard: https://grafana.sentinel.cdf.cm
+          Runbook: {{ range .Alerts }}{{ .Annotations.runbook_url }}{{ end }}
+    
+    # Critical alerts - multiple channels
+    - name: 'critical-alerts'
+      email_configs:
+      - to: 'operations@cdf.cm,security@cdf.cm,management@cdf.cm'
+        subject: '[CRITICAL] Project Sentinel Alert'
+        body: |
+          🚨 CRITICAL ALERT 🚨
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Started: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Immediate action required!
+          Dashboard: https://grafana.sentinel.cdf.cm
+        headers:
+          X-Priority: '1'
+          
+      slack_configs:
+      - channel: '#sentinel-critical'
+        color: 'danger'
+        title: '🚨 Critical Alert - Project Sentinel'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Instance: {{ .Labels.instance }}
+          {{ end }}
+        actions:
+        - type: button
+          text: 'View Dashboard'
+          url: 'https://grafana.sentinel.cdf.cm'
+        - type: button
+          text: 'Silence Alert'
+          url: 'https://alertmanager.sentinel.cdf.cm'
+    
+    # Security team notifications
+    - name: 'security-team'
+      email_configs:
+      - to: 'security@cdf.cm'
+        subject: '[SECURITY] Project Sentinel Security Alert'
+        body: |
+          🔐 SECURITY ALERT 🔐
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Security investigation required.
+          Dashboard: https://grafana.sentinel.cdf.cm/d/sentinel-security
+        headers:
+          X-Priority: '2'
+          
+      slack_configs:
+      - channel: '#security-alerts'
+        color: 'warning'
+        title: '🔐 Security Alert - Project Sentinel'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+    
+    # Database team notifications
+    - name: 'database-team'
+      email_configs:
+      - to: 'database@cdf.cm'
+        subject: '[DATABASE] Project Sentinel Database Alert'
+        body: |
+          🗄️ DATABASE ALERT
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Database attention required.
+          Dashboard: https://grafana.sentinel.cdf.cm
+    
+    # Performance team notifications
+    - name: 'performance-team'
+      email_configs:
+      - to: 'performance@cdf.cm'
+        subject: '[PERFORMANCE] Project Sentinel Performance Alert'
+        body: |
+          📊 PERFORMANCE ALERT
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Performance optimization may be required.
+          Dashboard: https://grafana.sentinel.cdf.cm
+    
+    # Infrastructure team notifications
+    - name: 'infrastructure-team'
+      email_configs:
+      - to: 'infrastructure@cdf.cm'
+        subject: '[INFRASTRUCTURE] Project Sentinel Infrastructure Alert'
+        body: |
+          🏗️ INFRASTRUCTURE ALERT
+          
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Instance: {{ .Labels.instance }}
+          Time: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+          {{ end }}
+          
+          Infrastructure attention required.
+          Dashboard: https://grafana.sentinel.cdf.cm
+
+  # Email templates
+  email.tmpl: |
+    {{ define "email.default.subject" }}
+    [{{ .Status | toUpper }}] {{ range .Alerts }}{{ .Annotations.summary }} {{ end }}
+    {{ end }}
+    
+    {{ define "email.default.html" }}
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+    body { font-family: Arial, sans-serif; }
+    .alert { margin: 10px 0; padding: 10px; border-left: 4px solid #ddd; }
+    .critical { border-color: #d73027; background-color: #fff2f2; }
+    .warning { border-color: #fd8c3c; background-color: #fff8f2; }
+    .info { border-color: #4575b4; background-color: #f2f8ff; }
+    </style>
+    </head>
+    <body>
+    <h2>Project Sentinel Alert</h2>
+    {{ range .Alerts }}
+    <div class="alert {{ .Labels.severity }}">
+    <h3>{{ .Annotations.summary }}</h3>
+    <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+    <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+    <p><strong>Instance:</strong> {{ .Labels.instance }}</p>
+    <p><strong>Started:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</p>
+    {{ if .Annotations.runbook_url }}
+    <p><a href="{{ .Annotations.runbook_url }}">Runbook</a></p>
+    {{ end }}
+    </div>
+    {{ end }}
+    <p><a href="https://grafana.sentinel.cdf.cm">View Dashboard</a></p>
+    </body>
+    </html>
+    {{ end }}
+
+---
+# Service Account for Alertmanager
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alertmanager-sa
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    project: sentinel
+
+---
+# Monitoring Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    project: sentinel
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

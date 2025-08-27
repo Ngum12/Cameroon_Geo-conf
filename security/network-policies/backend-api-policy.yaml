@@ -1,0 +1,274 @@
+# Network Policy for Backend API Services
+# Allows only necessary ingress and egress traffic for Django backend
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-api-policy
+  namespace: sentinel-prod
+  labels:
+    app: backend-api
+    project: sentinel
+    security-policy: "api-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: backend-api
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow traffic from frontend dashboard
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend-dashboard
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow traffic from Celery workers (for internal API calls)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow health check probes from kubelet
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  egress:
+  # Allow access to PostgreSQL database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access to NLP services
+  - to:
+    - podSelector:
+        matchLabels:
+          app: translation-service
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  - to:
+    - podSelector:
+        matchLabels:
+          app: ner-service
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow HTTPS access to external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP access for health checks and webhooks
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy for Celery Workers
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: celery-worker-policy
+  namespace: sentinel-prod
+  labels:
+    app: celery-worker
+    project: sentinel
+    security-policy: "worker-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: celery-worker
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow monitoring traffic (for health checks)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  
+  egress:
+  # Allow access to PostgreSQL database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow access to Redis (message broker)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access to NLP services
+  - to:
+    - podSelector:
+        matchLabels:
+          app: translation-service
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  - to:
+    - podSelector:
+        matchLabels:
+          app: ner-service
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access to backend API (for internal operations)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow HTTPS access to external data sources
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy for Celery Beat Scheduler
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: celery-beat-policy
+  namespace: sentinel-prod
+  labels:
+    app: celery-beat
+    project: sentinel
+    security-policy: "scheduler-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: celery-beat
+  policyTypes:
+  - Egress
+  
+  egress:
+  # Allow access to Redis (message broker)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  
+  # Allow access to PostgreSQL (for schedule persistence)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Network Policy for Celery Flower Monitoring
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: celery-flower-policy
+  namespace: sentinel-prod
+  labels:
+    app: celery-flower
+    project: sentinel
+    security-policy: "monitoring-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: celery-flower
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow access from ingress controller (for web UI)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 5555
+  
+  # Allow access from monitoring systems
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 5555
+  
+  egress:
+  # Allow access to Redis (to monitor Celery)
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379

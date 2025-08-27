@@ -1,0 +1,453 @@
+# Celery Worker Deployment for Project Sentinel
+# Background task processing for data ingestion and analysis
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: sentinel-prod
+  labels:
+    app: celery-worker
+    component: worker
+    project: sentinel
+    version: prod
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        component: worker
+        project: sentinel
+        version: prod
+    spec:
+      containers:
+      - name: celery-worker
+        image: registry.cdf.cm/sentinel/backend:prod
+        imagePullPolicy: Always
+        command: ["/entrypoint.sh"]
+        args: ["worker"]
+        env:
+        # Database Configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: password
+        - name: DB_NAME
+          value: "sentinel_db"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PORT
+          value: "5432"
+        
+        # Django Configuration
+        - name: DJANGO_SETTINGS_MODULE
+          value: "sentinel_core.settings_production"
+        - name: DJANGO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: django-secret
+              key: secret-key
+        
+        # Redis Configuration
+        - name: REDIS_HOST
+          value: "redis-service.sentinel-prod.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        
+        # NLP Services Configuration
+        - name: TRANSLATION_SERVICE_URL
+          value: "http://translation-service.sentinel-prod.svc.cluster.local:8000"
+        - name: NER_SERVICE_URL
+          value: "http://ner-service.sentinel-prod.svc.cluster.local:8000"
+        
+        # Celery Configuration
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        - name: CELERY_CONCURRENCY
+          value: "2"
+        - name: CELERY_PREFETCH_MULTIPLIER
+          value: "1"
+        - name: CELERY_MAX_TASKS_PER_CHILD
+          value: "1000"
+        
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+            
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "celery -A sentinel_core inspect ping -d celery@$HOSTNAME"
+          initialDelaySeconds: 60
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+          
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: tmp-volume
+          mountPath: /tmp
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            
+      volumes:
+      - name: logs
+        persistentVolumeClaim:
+          claimName: celery-logs-pvc
+      - name: tmp-volume
+        emptyDir: {}
+        
+      imagePullSecrets:
+      - name: registry-credentials
+      
+      nodeSelector:
+        workload-type: worker
+
+---
+# Celery Beat Scheduler Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: sentinel-prod
+  labels:
+    app: celery-beat
+    component: scheduler
+    project: sentinel
+    version: prod
+spec:
+  replicas: 1  # Only one beat scheduler needed
+  strategy:
+    type: Recreate  # Prevent multiple schedulers
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+        component: scheduler
+        project: sentinel
+        version: prod
+    spec:
+      containers:
+      - name: celery-beat
+        image: registry.cdf.cm/sentinel/backend:prod
+        imagePullPolicy: Always
+        command: ["/entrypoint.sh"]
+        args: ["beat"]
+        env:
+        # Database Configuration
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: host
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: password
+        - name: DB_NAME
+          value: "sentinel_db"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PORT
+          value: "5432"
+        
+        # Django Configuration
+        - name: DJANGO_SETTINGS_MODULE
+          value: "sentinel_core.settings_production"
+        - name: DJANGO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: django-secret
+              key: secret-key
+        
+        # Redis Configuration
+        - name: REDIS_HOST
+          value: "redis-service.sentinel-prod.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        
+        # Celery Configuration
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+            
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - "ps aux | grep -q 'celery.*beat' && echo 'Beat scheduler running'"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        volumeMounts:
+        - name: beat-schedule
+          mountPath: /app/celerybeat-schedule
+        - name: logs
+          mountPath: /app/logs
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            
+      volumes:
+      - name: beat-schedule
+        persistentVolumeClaim:
+          claimName: celery-beat-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: celery-logs-pvc
+          
+      imagePullSecrets:
+      - name: registry-credentials
+      
+      nodeSelector:
+        workload-type: worker
+
+---
+# Celery Flower Monitoring Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-flower
+  namespace: sentinel-prod
+  labels:
+    app: celery-flower
+    component: monitoring
+    project: sentinel
+    version: prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-flower
+  template:
+    metadata:
+      labels:
+        app: celery-flower
+        component: monitoring
+        project: sentinel
+        version: prod
+    spec:
+      containers:
+      - name: celery-flower
+        image: registry.cdf.cm/sentinel/backend:prod
+        imagePullPolicy: Always
+        command: ["/entrypoint.sh"]
+        args: ["flower"]
+        ports:
+        - containerPort: 5555
+          name: flower
+          protocol: TCP
+        env:
+        # Redis Configuration
+        - name: REDIS_HOST
+          value: "redis-service.sentinel-prod.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        
+        # Celery Configuration
+        - name: CELERY_BROKER_URL
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        - name: CELERY_RESULT_BACKEND
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
+        
+        # Flower Configuration
+        - name: FLOWER_PORT
+          value: "5555"
+        - name: FLOWER_BASIC_AUTH
+          value: "admin:SentinelFlower2024!"
+        
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+            
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5555
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5555
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+            
+      imagePullSecrets:
+      - name: registry-credentials
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: celery-flower-service
+  namespace: sentinel-prod
+  labels:
+    app: celery-flower
+    component: monitoring
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: flower
+    port: 5555
+    targetPort: 5555
+    protocol: TCP
+  selector:
+    app: celery-flower
+
+---
+# Persistent Volume Claims for Celery
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: celery-logs-pvc
+  namespace: sentinel-prod
+  labels:
+    app: celery-worker
+    component: worker
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: shared-storage
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: celery-beat-pvc
+  namespace: sentinel-prod
+  labels:
+    app: celery-beat
+    component: scheduler
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Horizontal Pod Autoscaler for Celery Workers
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-worker-hpa
+  namespace: sentinel-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85

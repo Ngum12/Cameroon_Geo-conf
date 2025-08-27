@@ -1,0 +1,255 @@
+# Network Policy for NLP Services
+# Restricts access to translation and NER services
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: translation-service-policy
+  namespace: sentinel-prod
+  labels:
+    app: translation-service
+    project: sentinel
+    security-policy: "nlp-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: translation-service
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow access from backend API
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from Celery workers
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from data ingestion services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: data-ingestion
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from ingress controller (for admin/monitoring)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow monitoring traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow health check probes
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  egress:
+  # Allow HTTPS access to Hugging Face model repository
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP access for model downloads
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy for NER Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ner-service-policy
+  namespace: sentinel-prod
+  labels:
+    app: ner-service
+    project: sentinel
+    security-policy: "nlp-access"
+spec:
+  podSelector:
+    matchLabels:
+      app: ner-service
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow access from backend API
+  - from:
+    - podSelector:
+        matchLabels:
+          app: backend-api
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from Celery workers
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from data ingestion services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: data-ingestion
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow access from ingress controller (for admin/monitoring)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow monitoring traffic
+  - from:
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  # Allow health check probes
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8000
+  
+  egress:
+  # Allow HTTPS access to Hugging Face model repository
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP access for model downloads
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+
+---
+# Network Policy for Monitoring Namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-ingress-policy
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "monitoring-access"
+spec:
+  podSelector:
+    matchLabels:
+      component: monitoring
+  policyTypes:
+  - Ingress
+  
+  ingress:
+  # Allow access from monitoring namespace (Prometheus)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080  # metrics port
+    - protocol: TCP
+      port: 9090  # Prometheus port
+    - protocol: TCP
+      port: 9100  # Node exporter
+    - protocol: TCP
+      port: 9187  # PostgreSQL exporter
+    - protocol: TCP
+      port: 9121  # Redis exporter
+
+---
+# Network Policy for External Access Control
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-access-policy
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    security-policy: "external-access"
+spec:
+  podSelector:
+    matchLabels:
+      allow-external: "true"
+  policyTypes:
+  - Egress
+  
+  egress:
+  # Allow HTTPS to trusted external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP to specific external services (news sources, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # Allow access to external NTP servers
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+  
+  # Allow access to external SMTP servers
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 587
+    - protocol: TCP
+      port: 465
+    - protocol: TCP
+      port: 25

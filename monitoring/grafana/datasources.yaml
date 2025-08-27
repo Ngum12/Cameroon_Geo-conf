@@ -1,0 +1,129 @@
+# Grafana Datasources Configuration for Project Sentinel
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: datasources
+    project: sentinel
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    
+    # List of datasources to insert/update
+    datasources:
+    
+    # Prometheus datasource
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      orgId: 1
+      uid: prometheus-uid
+      url: http://prometheus-service.monitoring.svc.cluster.local:9090
+      isDefault: true
+      version: 1
+      editable: true
+      jsonData:
+        httpMethod: POST
+        manageAlerts: true
+        prometheusType: Prometheus
+        prometheusVersion: 2.47.0
+        cacheLevel: 'High'
+        disableRecordingRules: false
+        incrementalQueryOverlapWindow: 10m
+        queryTimeout: 60s
+        timeInterval: 30s
+        customQueryParameters: ''
+        exemplarTraceIdDestinations:
+          - name: trace_id
+            datasource:
+              type: jaeger
+              uid: jaeger-uid
+    
+    # Loki for log aggregation (if available)
+    - name: Loki
+      type: loki
+      access: proxy
+      orgId: 1
+      uid: loki-uid
+      url: http://loki-gateway.monitoring.svc.cluster.local:80
+      isDefault: false
+      version: 1
+      editable: true
+      jsonData:
+        maxLines: 1000
+        derivedFields:
+          - datasourceUid: jaeger-uid
+            matcherRegex: "trace_id=(\\w+)"
+            name: TraceID
+            url: "$${__value.raw}"
+    
+    # PostgreSQL datasource for direct database queries
+    - name: PostgreSQL
+      type: postgres
+      access: proxy
+      orgId: 1
+      uid: postgres-uid
+      url: postgres-service.sentinel-prod.svc.cluster.local:5432
+      database: sentinel_db
+      user: grafana_readonly
+      isDefault: false
+      version: 1
+      editable: false
+      secureJsonData:
+        password: '${POSTGRES_PASSWORD}'
+      jsonData:
+        sslmode: require
+        postgresVersion: 1500  # PostgreSQL 15
+        timescaledb: false
+        
+    # Jaeger for distributed tracing (if available)
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      orgId: 1
+      uid: jaeger-uid
+      url: http://jaeger-query.monitoring.svc.cluster.local:16686
+      isDefault: false
+      version: 1
+      editable: true
+      jsonData:
+        tracesToLogs:
+          datasourceUid: loki-uid
+          tags:
+            - key: service.name
+              value: service
+            - key: container.name
+              value: container
+          mapTagNamesEnabled: true
+          mappedTags:
+            - key: service.name
+              value: service
+        tracesToMetrics:
+          datasourceUid: prometheus-uid
+          tags:
+            - key: service.name
+              value: service
+            - key: operation
+              value: operation
+          queries:
+            - name: 'Sample query'
+              query: 'sum(rate(traces_spanmetrics_latency_bucket{$__tags}[5m]))'
+        nodeGraph:
+          enabled: true
+        spanBar:
+          type: Tag
+          tag: http.status_code
+    
+    # TestData datasource for demos and testing
+    - name: TestData
+      type: testdata
+      access: proxy
+      orgId: 1
+      uid: testdata-uid
+      isDefault: false
+      version: 1
+      editable: true

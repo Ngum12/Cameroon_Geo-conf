@@ -1,0 +1,336 @@
+# Grafana Deployment for Project Sentinel Monitoring
+# Comprehensive visualization dashboards for operations team
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: dashboard
+    project: sentinel
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Single instance to avoid config conflicts
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: dashboard
+        project: sentinel
+    spec:
+      serviceAccountName: grafana-sa
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.2.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        # Security settings
+        - name: GF_SECURITY_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-user
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-password
+        - name: GF_SECURITY_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: secret-key
+        
+        # Server settings
+        - name: GF_SERVER_DOMAIN
+          value: "grafana.sentinel.cdf.cm"
+        - name: GF_SERVER_ROOT_URL
+          value: "https://grafana.sentinel.cdf.cm/"
+        - name: GF_SERVER_SERVE_FROM_SUB_PATH
+          value: "false"
+        
+        # Database settings (SQLite for simplicity)
+        - name: GF_DATABASE_TYPE
+          value: "sqlite3"
+        - name: GF_DATABASE_PATH
+          value: "/var/lib/grafana/grafana.db"
+        
+        # Authentication settings
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "false"
+        - name: GF_AUTH_BASIC_ENABLED
+          value: "true"
+        - name: GF_AUTH_DISABLE_LOGIN_FORM
+          value: "false"
+        
+        # LDAP/OAuth settings (if applicable)
+        - name: GF_AUTH_LDAP_ENABLED
+          value: "false"
+        - name: GF_AUTH_OAUTH_AUTO_LOGIN
+          value: "false"
+        
+        # Logging
+        - name: GF_LOG_LEVEL
+          value: "info"
+        - name: GF_LOG_MODE
+          value: "console file"
+        
+        # Alerting
+        - name: GF_ALERTING_ENABLED
+          value: "true"
+        - name: GF_UNIFIED_ALERTING_ENABLED
+          value: "true"
+        
+        # Provisioning
+        - name: GF_PATHS_PROVISIONING
+          value: "/etc/grafana/provisioning"
+        
+        # Install plugins
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel,natel-discrete-panel"
+        
+        # User settings
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_USERS_ALLOW_ORG_CREATE
+          value: "false"
+        - name: GF_USERS_AUTO_ASSIGN_ORG
+          value: "true"
+        - name: GF_USERS_AUTO_ASSIGN_ORG_ROLE
+          value: "Viewer"
+        
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+            
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+          
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+          
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: grafana-config
+          mountPath: /etc/grafana/grafana.ini
+          subPath: grafana.ini
+        - name: grafana-provisioning-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: grafana-provisioning-dashboards
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+          
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 472  # grafana user
+          runAsGroup: 472
+          fsGroup: 472
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+            
+      # Init container for proper permissions
+      initContainers:
+      - name: init-grafana
+        image: busybox:1.36
+        command: ['sh', '-c']
+        args:
+        - |
+          chown -R 472:472 /var/lib/grafana
+          chmod -R 755 /var/lib/grafana
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        securityContext:
+          runAsUser: 0
+          
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-storage-pvc
+      - name: grafana-config
+        configMap:
+          name: grafana-config
+      - name: grafana-provisioning-datasources
+        configMap:
+          name: grafana-datasources
+      - name: grafana-provisioning-dashboards
+        configMap:
+          name: grafana-dashboard-providers
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
+          
+      nodeSelector:
+        workload-type: "monitoring"
+        
+      tolerations:
+      - key: "monitoring"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: dashboard
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: grafana
+
+---
+# Grafana Storage PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-storage-pvc
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: storage
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Grafana Credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-credentials
+  namespace: monitoring
+  labels:
+    app: grafana
+    project: sentinel
+type: Opaque
+data:
+  # admin:SentinelGrafana$2024 (base64 encoded)
+  admin-user: YWRtaW4=  # admin
+  admin-password: U2VudGluZWxHcmFmYW5hJDIwMjQ=  # SentinelGrafana$2024
+  secret-key: c2VudGluZWwtZ3JhZmFuYS1zZWNyZXQta2V5LTIwMjQ=  # sentinel-grafana-secret-key-2024
+
+---
+# Grafana Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+  labels:
+    app: grafana
+    project: sentinel
+data:
+  grafana.ini: |
+    [server]
+    domain = grafana.sentinel.cdf.cm
+    root_url = https://grafana.sentinel.cdf.cm/
+    serve_from_sub_path = false
+    
+    [security]
+    admin_user = admin
+    cookie_secure = true
+    cookie_samesite = strict
+    content_type_protection_header = true
+    x_content_type_options = nosniff
+    x_xss_protection = true
+    strict_transport_security = true
+    strict_transport_security_max_age_seconds = 86400
+    
+    [auth]
+    disable_login_form = false
+    disable_signout_menu = false
+    
+    [auth.anonymous]
+    enabled = false
+    
+    [auth.basic]
+    enabled = true
+    
+    [users]
+    allow_sign_up = false
+    allow_org_create = false
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+    
+    [log]
+    level = info
+    mode = console file
+    
+    [alerting]
+    enabled = true
+    
+    [unified_alerting]
+    enabled = true
+    
+    [smtp]
+    enabled = true
+    host = smtp.cdf.cm:587
+    user = grafana@sentinel.cdf.cm
+    password = """${GF_SMTP_PASSWORD}"""
+    from_address = grafana@sentinel.cdf.cm
+    from_name = Project Sentinel Grafana
+    
+    [panels]
+    disable_sanitize_html = false
+    
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/sentinel-overview.json
+
+---
+# Service Account for Grafana
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-sa
+  namespace: monitoring
+  labels:
+    app: grafana
+    project: sentinel

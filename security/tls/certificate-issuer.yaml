@@ -1,0 +1,261 @@
+# TLS Certificate Issuer Configuration for Project Sentinel
+# Uses cert-manager for automatic certificate management
+
+# Let's Encrypt ClusterIssuer for production certificates
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    project: sentinel
+    certificate-issuer: "letsencrypt"
+spec:
+  acme:
+    # Let's Encrypt ACME server URL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiration notifications
+    email: security@cdf.cm
+    
+    # Private key secret name
+    privateKeySecretRef:
+      name: letsencrypt-prod-private-key
+    
+    # HTTP-01 challenge solver
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+          podTemplate:
+            spec:
+              nodeSelector:
+                workload-type: "infrastructure"
+
+---
+# Let's Encrypt Staging Issuer (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    project: sentinel
+    certificate-issuer: "letsencrypt-staging"
+spec:
+  acme:
+    # Let's Encrypt staging server URL (for testing)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiration notifications
+    email: security@cdf.cm
+    
+    # Private key secret name
+    privateKeySecretRef:
+      name: letsencrypt-staging-private-key
+    
+    # HTTP-01 challenge solver
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+
+---
+# Internal CA Issuer for service-to-service communication
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: internal-ca-issuer
+  labels:
+    project: sentinel
+    certificate-issuer: "internal-ca"
+spec:
+  ca:
+    secretName: internal-ca-key-pair
+
+---
+# Self-signed issuer for creating the internal CA
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  labels:
+    project: sentinel
+    certificate-issuer: "selfsigned"
+spec:
+  selfSigned: {}
+
+---
+# Create internal CA certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: internal-ca-cert
+  namespace: cert-manager
+  labels:
+    project: sentinel
+    certificate-type: "ca-root"
+spec:
+  secretName: internal-ca-key-pair
+  duration: 43800h  # 5 years
+  renewBefore: 8760h  # 1 year before expiry
+  isCA: true
+  commonName: "Project Sentinel Internal CA"
+  subject:
+    organizationalUnits:
+    - "Cameroon Defense Force"
+    - "Project Sentinel"
+    organizations:
+    - "Cameroon Defense Force"
+    countries:
+    - "CM"
+    localities:
+    - "Yaoundé"
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+
+---
+# Wildcard certificate for sentinel.cdf.cm domain
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sentinel-wildcard-cert
+  namespace: sentinel-prod
+  labels:
+    project: sentinel
+    certificate-type: "wildcard"
+spec:
+  secretName: sentinel-wildcard-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days before expiry
+  commonName: "*.sentinel.cdf.cm"
+  dnsNames:
+  - "sentinel.cdf.cm"
+  - "*.sentinel.cdf.cm"
+  - "api.sentinel.cdf.cm"
+  - "grafana.sentinel.cdf.cm"
+  - "nlp.sentinel.cdf.cm"
+  - "flower.sentinel.cdf.cm"
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+---
+# Internal service certificates for mTLS
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backend-api-internal-cert
+  namespace: sentinel-prod
+  labels:
+    app: backend-api
+    project: sentinel
+    certificate-type: "service-internal"
+spec:
+  secretName: backend-api-internal-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days before expiry
+  commonName: "backend-api.sentinel-prod.svc.cluster.local"
+  dnsNames:
+  - "backend-api-service"
+  - "backend-api-service.sentinel-prod"
+  - "backend-api-service.sentinel-prod.svc"
+  - "backend-api-service.sentinel-prod.svc.cluster.local"
+  - "localhost"
+  ipAddresses:
+  - "127.0.0.1"
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  - client auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: ClusterIssuer
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-internal-cert
+  namespace: sentinel-prod
+  labels:
+    app: postgres
+    project: sentinel
+    certificate-type: "service-internal"
+spec:
+  secretName: postgres-internal-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days before expiry
+  commonName: "postgres-service.sentinel-prod.svc.cluster.local"
+  dnsNames:
+  - "postgres-service"
+  - "postgres-service.sentinel-prod"
+  - "postgres-service.sentinel-prod.svc"
+  - "postgres-service.sentinel-prod.svc.cluster.local"
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: ClusterIssuer
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redis-internal-cert
+  namespace: sentinel-prod
+  labels:
+    app: redis
+    project: sentinel
+    certificate-type: "service-internal"
+spec:
+  secretName: redis-internal-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days before expiry
+  commonName: "redis-service.sentinel-prod.svc.cluster.local"
+  dnsNames:
+  - "redis-service"
+  - "redis-service.sentinel-prod"
+  - "redis-service.sentinel-prod.svc"
+  - "redis-service.sentinel-prod.svc.cluster.local"
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: ClusterIssuer
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nlp-services-internal-cert
+  namespace: sentinel-prod
+  labels:
+    app: nlp-services
+    project: sentinel
+    certificate-type: "service-internal"
+spec:
+  secretName: nlp-services-internal-tls
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # 30 days before expiry
+  commonName: "translation-service.sentinel-prod.svc.cluster.local"
+  dnsNames:
+  - "translation-service"
+  - "translation-service.sentinel-prod"
+  - "translation-service.sentinel-prod.svc"
+  - "translation-service.sentinel-prod.svc.cluster.local"
+  - "ner-service"
+  - "ner-service.sentinel-prod"
+  - "ner-service.sentinel-prod.svc"
+  - "ner-service.sentinel-prod.svc.cluster.local"
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+  issuerRef:
+    name: internal-ca-issuer
+    kind: ClusterIssuer

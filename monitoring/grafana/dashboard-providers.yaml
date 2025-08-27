@@ -1,0 +1,51 @@
+# Grafana Dashboard Providers Configuration for Project Sentinel
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-providers
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: dashboards
+    project: sentinel
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    
+    providers:
+    # Project Sentinel Dashboards
+    - name: 'sentinel-dashboards'
+      orgId: 1
+      folder: 'Project Sentinel'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards
+        foldersFromFilesStructure: true
+    
+    # Kubernetes Dashboards
+    - name: 'k8s-dashboards'
+      orgId: 1
+      folder: 'Kubernetes'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/kubernetes
+        foldersFromFilesStructure: true
+    
+    # Infrastructure Dashboards  
+    - name: 'infrastructure-dashboards'
+      orgId: 1
+      folder: 'Infrastructure'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 10
+      allowUiUpdates: true
+      options:
+        path: /var/lib/grafana/dashboards/infrastructure
+        foldersFromFilesStructure: true
