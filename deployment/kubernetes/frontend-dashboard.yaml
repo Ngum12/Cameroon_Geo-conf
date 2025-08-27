@@ -1,0 +1,217 @@
+# Frontend Dashboard Kubernetes Deployment for Project Sentinel
+# Production-ready React application with Nginx
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-dashboard
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend-dashboard
+  template:
+    metadata:
+      labels:
+        app: frontend-dashboard
+        component: frontend
+        project: sentinel
+    spec:
+      containers:
+      - name: frontend-dashboard
+        image: registry.cdf.cm/sentinel/dashboard:prod
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        env:
+        - name: NGINX_PORT
+          value: "80"
+        - name: API_BASE_URL
+          value: "https://api.sentinel.cdf.cm"
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: logs
+          mountPath: /var/log/nginx
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: frontend-nginx-config
+      - name: logs
+        emptyDir: {}
+      imagePullSecrets:
+      - name: registry-secret
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-dashboard
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: frontend-dashboard
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-config
+  namespace: sentinel-prod
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name dashboard.sentinel.cdf.cm;
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://api.mapbox.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com; font-src 'self' https://fonts.gstatic.com https://api.mapbox.com; img-src 'self' data: https: blob:; connect-src 'self' https://api.mapbox.com https://events.mapbox.com wss: https://api.sentinel.cdf.cm; worker-src 'self' blob:;" always;
+        
+        # Root directory
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types
+            application/json
+            application/javascript
+            application/xml+rss
+            application/xml
+            image/svg+xml
+            text/css
+            text/javascript
+            text/xml
+            text/plain;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            access_log off;
+        }
+        
+        # Main application route
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        # Prevent access to hidden files
+        location ~ /\. {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+    }
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-dashboard-ingress
+  namespace: sentinel-prod
+  labels:
+    app: frontend-dashboard
+    component: frontend
+    project: sentinel
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/secure-backends: "true"
+spec:
+  tls:
+  - hosts:
+    - dashboard.sentinel.cdf.cm
+    secretName: dashboard-tls-secret
+  rules:
+  - host: dashboard.sentinel.cdf.cm
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-dashboard
+            port:
+              number: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-dashboard-hpa
+  namespace: sentinel-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend-dashboard
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

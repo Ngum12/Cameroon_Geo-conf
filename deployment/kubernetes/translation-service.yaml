@@ -1,0 +1,152 @@
+# Translation Service Kubernetes Deployment for Project Sentinel
+# Production-ready deployment with resource limits and health checks
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: translation-service
+  namespace: sentinel-prod
+  labels:
+    app: translation-service
+    component: nlp
+    project: sentinel
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: translation-service
+  template:
+    metadata:
+      labels:
+        app: translation-service
+        component: nlp
+        project: sentinel
+    spec:
+      containers:
+      - name: translation-service
+        image: registry.cdf.cm/sentinel/translation-service:prod
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: MODEL_NAME
+          value: "facebook/m2m100_418M"
+        - name: MAX_WORKERS
+          value: "4"
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+            nvidia.com/gpu: "1"  # Optional: GPU acceleration
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 2
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/.cache
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: translation-model-pvc
+      - name: tmp-volume
+        emptyDir: {}
+      imagePullSecrets:
+      - name: registry-secret
+      nodeSelector:
+        workload-type: nlp
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: translation-service
+  namespace: sentinel-prod
+  labels:
+    app: translation-service
+    component: nlp
+    project: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: translation-service
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: translation-model-pvc
+  namespace: sentinel-prod
+  labels:
+    app: translation-service
+    component: nlp
+    project: sentinel
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: translation-service-hpa
+  namespace: sentinel-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: translation-service
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

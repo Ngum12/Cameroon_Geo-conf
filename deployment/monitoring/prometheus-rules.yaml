@@ -1,0 +1,228 @@
+# Prometheus Alerting Rules for Project Sentinel
+# Monitors system health, performance, and security metrics
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: project-sentinel-alerts
+  namespace: sentinel-prod
+  labels:
+    app: prometheus-rules
+    project: sentinel
+spec:
+  groups:
+  - name: sentinel.critical
+    interval: 30s
+    rules:
+    
+    # System Availability Alerts
+    - alert: ServiceDown
+      expr: up{job=~".*sentinel.*"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        component: "{{ $labels.job }}"
+      annotations:
+        summary: "Project Sentinel service is down"
+        description: "Service {{ $labels.job }} has been down for more than 1 minute"
+        runbook_url: "https://docs.sentinel.cdf.cm/alerts/service-down"
+    
+    - alert: PostgreSQLDown
+      expr: up{job="postgres"} == 0
+      for: 30s
+      labels:
+        severity: critical
+        component: database
+      annotations:
+        summary: "PostgreSQL database is down"
+        description: "PostgreSQL database has been unreachable for 30 seconds"
+        runbook_url: "https://docs.sentinel.cdf.cm/alerts/postgres-down"
+    
+    # Performance Alerts
+    - alert: HighAPILatency
+      expr: histogram_quantile(0.95, rate(django_http_requests_latency_seconds_bucket[5m])) > 0.5
+      for: 2m
+      labels:
+        severity: warning
+        component: backend-api
+      annotations:
+        summary: "High API response latency detected"
+        description: "95th percentile latency is {{ $value }}s for the last 5 minutes"
+        runbook_url: "https://docs.sentinel.cdf.cm/alerts/high-latency"
+    
+    - alert: HighErrorRate
+      expr: rate(django_http_requests_total{status=~"5.."}[5m]) / rate(django_http_requests_total[5m]) > 0.01
+      for: 1m
+      labels:
+        severity: warning
+        component: backend-api
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+        runbook_url: "https://docs.sentinel.cdf.cm/alerts/high-error-rate"
+    
+    # Resource Usage Alerts
+    - alert: HighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{pod=~".*sentinel.*"}[5m]) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: "{{ $labels.pod }}"
+      annotations:
+        summary: "High CPU usage detected"
+        description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}"
+    
+    - alert: HighMemoryUsage
+      expr: container_memory_usage_bytes{pod=~".*sentinel.*"} / container_spec_memory_limit_bytes > 0.9
+      for: 2m
+      labels:
+        severity: warning
+        component: "{{ $labels.pod }}"
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }} of limit"
+    
+    - alert: DiskSpaceLow
+      expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+      for: 1m
+      labels:
+        severity: critical
+        component: storage
+      annotations:
+        summary: "Low disk space"
+        description: "Disk space is below 10% on node {{ $labels.instance }}"
+    
+    # NLP Services Specific Alerts
+    - alert: NLPServiceSlow
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=~".*nlp.*"}[5m])) > 10
+      for: 2m
+      labels:
+        severity: warning
+        component: nlp
+      annotations:
+        summary: "NLP service processing slowly"
+        description: "{{ $labels.job }} 95th percentile processing time is {{ $value }}s"
+    
+    - alert: TranslationQueueBacklog
+      expr: celery_task_queue_length{queue="translation"} > 100
+      for: 5m
+      labels:
+        severity: warning
+        component: translation
+      annotations:
+        summary: "Translation queue backlog"
+        description: "Translation queue has {{ $value }} pending tasks"
+    
+    # Database Performance Alerts
+    - alert: PostgreSQLSlowQueries
+      expr: rate(pg_stat_activity_max_tx_duration[5m]) > 60
+      for: 2m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "PostgreSQL slow queries detected"
+        description: "Max transaction duration is {{ $value }}s"
+    
+    - alert: PostgreSQLConnections
+      expr: pg_stat_activity_count / pg_settings_max_connections > 0.8
+      for: 2m
+      labels:
+        severity: warning
+        component: database
+      annotations:
+        summary: "PostgreSQL connection usage high"
+        description: "Connection usage is {{ $value | humanizePercentage }} of maximum"
+    
+    # Security Alerts
+    - alert: UnauthorizedAPIAccess
+      expr: increase(django_http_requests_total{status="401"}[5m]) > 10
+      for: 1m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "High number of unauthorized API requests"
+        description: "{{ $value }} unauthorized requests in the last 5 minutes"
+    
+    - alert: SuspiciousActivity
+      expr: increase(django_http_requests_total{status="403"}[5m]) > 5
+      for: 1m
+      labels:
+        severity: warning
+        component: security
+      annotations:
+        summary: "Suspicious activity detected"
+        description: "{{ $value }} forbidden requests in the last 5 minutes"
+    
+    # Data Processing Alerts
+    - alert: ArticleProcessingBacklog
+      expr: sentinel_article_processing_queue_size > 1000
+      for: 10m
+      labels:
+        severity: warning
+        component: processing
+      annotations:
+        summary: "Article processing backlog"
+        description: "{{ $value }} articles waiting for processing"
+    
+    - alert: LowDataIngestionRate
+      expr: rate(sentinel_articles_ingested_total[1h]) < 10
+      for: 30m
+      labels:
+        severity: warning
+        component: ingestion
+      annotations:
+        summary: "Low data ingestion rate"
+        description: "Only {{ $value }} articles ingested per hour"
+
+  - name: sentinel.infrastructure
+    interval: 1m
+    rules:
+    
+    # Kubernetes Health
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{pod=~".*sentinel.*"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+    
+    - alert: PodNotReady
+      expr: kube_pod_status_ready{condition="false", pod=~".*sentinel.*"} == 1
+      for: 5m
+      labels:
+        severity: warning
+        component: kubernetes
+      annotations:
+        summary: "Pod not ready"
+        description: "Pod {{ $labels.pod }} has been not ready for 5 minutes"
+    
+    # Network Connectivity
+    - alert: NetworkPolicyViolation
+      expr: increase(networkpolicy_drop_count_total[5m]) > 0
+      for: 1m
+      labels:
+        severity: warning
+        component: network
+      annotations:
+        summary: "Network policy violations detected"
+        description: "{{ $value }} network policy violations in the last 5 minutes"
+
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: project-sentinel-metrics
+  namespace: sentinel-prod
+spec:
+  selector:
+    matchLabels:
+      project: sentinel
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
