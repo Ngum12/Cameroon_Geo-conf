@@ -1,0 +1,101 @@
+# Dockerfile for Project Sentinel NER Service
+# Cameroon Defense Force OSINT Analysis System - Named Entity Recognition
+
+FROM python:3.11-slim
+
+# Set metadata labels
+LABEL maintainer="Project Sentinel ML Team"
+LABEL version="1.0"
+LABEL description="Named Entity Recognition service using XLM-RoBERTa for Project Sentinel"
+LABEL classification="RESTRICTED"
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/transformers \
+    TORCH_HOME=/app/.cache/torch
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    git \
+    curl \
+    wget \
+    unzip \
+    libgomp1 \
+    libblas3 \
+    liblapack3 \
+    libatlas-base-dev \
+    gfortran \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r nlp && useradd -r -g nlp -m nlp
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+
+# Install Python packages
+# Install torch with CPU support (change for GPU if needed)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Create necessary directories and set permissions
+RUN mkdir -p /app/.cache/huggingface /app/.cache/transformers /app/.cache/torch /app/logs /app/models && \
+    chown -R nlp:nlp /app
+
+# Copy application code
+COPY ner_service.py .
+
+# Switch to non-root user
+USER nlp
+
+# Pre-download the XLM-RoBERTa NER model at build time (optional)
+# This significantly speeds up startup time but increases image size (~2GB)
+# Comment out if you prefer smaller images with longer startup times
+RUN python -c "
+from transformers import AutoTokenizer, AutoModelForTokenClassification; 
+print('Pre-downloading XLM-RoBERTa NER model...'); 
+tokenizer = AutoTokenizer.from_pretrained('xlm-roberta-large-finetuned-conll03-english'); 
+model = AutoModelForTokenClassification.from_pretrained('xlm-roberta-large-finetuned-conll03-english'); 
+print('NER model downloaded successfully');
+"
+
+# Expose port for FastAPI (different from translation service)
+EXPOSE 8002
+
+# Health check with longer timeout for NER model
+HEALTHCHECK --interval=30s --timeout=45s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8002/health || exit 1
+
+# Set up logging and cache directories
+VOLUME ["/app/logs", "/app/.cache"]
+
+# Default command to run the NER service
+CMD ["uvicorn", "ner_service:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "1"]
+
+# Alternative commands for different deployment scenarios:
+
+# For development with auto-reload:
+# CMD ["uvicorn", "ner_service:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+
+# For production with Gunicorn:
+# CMD ["gunicorn", "ner_service:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8002", "--timeout", "120"]
+
+# Note: XLM-RoBERTa-large is a ~2GB model and requires:
+# - Memory: 4-8GB RAM minimum
+# - CPU: 4+ cores recommended  
+# - Storage: 3GB for model cache
+# - Startup time: 60-180 seconds
+
+# For GPU support (uncomment if using GPU-enabled base image):
+# FROM nvidia/cuda:11.8-devel-ubuntu20.04
+# RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

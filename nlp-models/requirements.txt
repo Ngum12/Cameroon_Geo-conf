@@ -10,6 +10,11 @@ sentencepiece>=0.1.99
 protobuf>=4.25.0
 tokenizers>=0.15.0
 
+# NER-specific dependencies
+# XLM-RoBERTa model dependencies
+accelerate>=0.24.0
+safetensors>=0.4.0
+
 # Additional ML libraries
 numpy>=1.24.0
 scipy>=1.11.0

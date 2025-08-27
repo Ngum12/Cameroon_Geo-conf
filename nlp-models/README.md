@@ -14,12 +14,25 @@ This directory contains the Natural Language Processing (NLP) pipeline component
 
 FastAPI-based service that translates text from multiple languages to English using Facebook's M2M100 model.
 
-#### Features
+### 2. Named Entity Recognition Service (`ner_service.py`)
+
+FastAPI-based service that extracts named entities (persons, locations, organizations) from English text using XLM-RoBERTa model fine-tuned on CoNLL-03 dataset.
+
+#### Translation Service Features
 - **Multi-language Support**: 100+ languages including French, English, Arabic, Spanish
 - **Automatic Language Detection**: Detects source language automatically
 - **High Performance**: Optimized for batch processing of news articles
 - **RESTful API**: Easy integration with other Project Sentinel components
 - **Health Monitoring**: Built-in health checks and status endpoints
+
+#### NER Service Features
+- **High-Accuracy Entity Extraction**: Uses state-of-the-art XLM-RoBERTa model
+- **Multiple Entity Types**: PERSON, LOCATION, ORGANIZATION, MISCELLANEOUS
+- **Confidence Scoring**: Each entity includes confidence score (0.0-1.0)
+- **Text Position Mapping**: Start/end positions for each entity
+- **Entity Grouping**: Grouped analysis by entity type
+- **Confidence Filtering**: High-confidence entity extraction
+- **Batch Processing**: Efficient processing of multiple texts
 
 #### API Endpoints
 
@@ -50,10 +63,62 @@ Service health check and model status.
 ##### GET `/languages`
 List of supported languages.
 
+##### POST `/analyze-entities` (NER Service)
+Extract named entities from English text.
+
+**Request:**
+```json
+{
+  "text": "President Paul Biya of Cameroon visited Yaoundé today."
+}
+```
+
+**Response:**
+```json
+{
+  "entities": [
+    {
+      "word": "Paul Biya",
+      "entity_group": "PERSON",
+      "confidence": 0.9998,
+      "start": 10,
+      "end": 19
+    },
+    {
+      "word": "Cameroon", 
+      "entity_group": "LOCATION",
+      "confidence": 0.9995,
+      "start": 23,
+      "end": 31
+    },
+    {
+      "word": "Yaoundé",
+      "entity_group": "LOCATION", 
+      "confidence": 0.9992,
+      "start": 40,
+      "end": 47
+    }
+  ],
+  "entity_count": 3,
+  "processing_time": 0.45,
+  "text_length": 56
+}
+```
+
+##### GET `/entity-types` (NER Service)
+List supported entity types and descriptions.
+
+##### POST `/analyze-entities/grouped` (NER Service)  
+Analyze entities and return grouped by type.
+
+##### POST `/analyze-entities/high-confidence` (NER Service)
+Return only high-confidence entities above specified threshold.
+
 ## Installation & Deployment
 
 ### Option 1: Docker Deployment (Recommended)
 
+#### Translation Service
 ```bash
 # Build the Docker image
 docker build -t project-sentinel/translation-service .
@@ -65,34 +130,58 @@ docker run -p 8001:8001 --name translation-service project-sentinel/translation-
 curl http://localhost:8001/health
 ```
 
+#### NER Service
+```bash
+# Build the NER Docker image 
+docker build -f ner_dockerfile -t project-sentinel/ner-service .
+
+# Run the NER container (note: different port 8002)
+docker run -p 8002:8002 --name ner-service project-sentinel/ner-service
+
+# Check NER service status  
+curl http://localhost:8002/health
+```
+
 ### Option 2: Local Development Setup
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the service
+# Run the translation service
 python translation_service.py
-
 # Or with uvicorn
 uvicorn translation_service:app --host 0.0.0.0 --port 8001 --reload
+
+# Run the NER service (in separate terminal)
+python ner_service.py  
+# Or with uvicorn
+uvicorn ner_service:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 ## Testing
 
-Run the test suite to verify functionality:
+Run the test suites to verify functionality:
 
 ```bash
-# Start the service first (in another terminal)
+# Test Translation Service
+# Start the translation service first (in another terminal)
 python translation_service.py
 
-# Run tests
+# Run translation tests
 python test_translation.py
+
+# Test NER Service  
+# Start the NER service first (in another terminal)
+python ner_service.py
+
+# Run NER tests
+python test_ner.py
 ```
 
 ## Integration with Data Ingestion
 
-The translation service integrates with the news spider in the `data-ingestion` directory:
+Both services integrate with the news spider in the `data-ingestion` directory:
 
 ```python
 # Example integration
@@ -106,9 +195,22 @@ async def translate_article(text, source_lang="auto"):
         )
         return response.json()
 
+async def extract_entities(text):
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://ner-service:8002/analyze-entities",
+            json={"text": text}
+        )
+        return response.json()
+
 # Use in spider pipeline
 translated_article = await translate_article(article['text'])
 article['translated_text'] = translated_article['translated_text']
+
+# Extract entities from translated text
+entities_result = await extract_entities(article['translated_text'])
+article['entities'] = entities_result['entities']
+article['entity_count'] = entities_result['entity_count']
 ```
 
 ## Kubernetes Deployment
