@@ -1,0 +1,154 @@
+{
+  "sources": [
+    {
+      "name": "Cameroon Tribune",
+      "url": "https://www.cameroon-tribune.cm/",
+      "country": "Cameroon",
+      "language": "en",
+      "category": "general_news",
+      "priority": "high",
+      "title_selectors": [
+        "h1.entry-title::text",
+        ".post-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text",
+        "article p::text"
+      ],
+      "time_selectors": [
+        ".entry-date::text",
+        "time::attr(datetime)"
+      ]
+    },
+    {
+      "name": "Journal du Cameroun",
+      "url": "https://www.journalducameroun.com/",
+      "country": "Cameroon",
+      "language": "fr",
+      "category": "general_news",
+      "priority": "high",
+      "title_selectors": [
+        "h1::text",
+        ".entry-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text",
+        "article p::text"
+      ],
+      "time_selectors": [
+        ".entry-meta time::attr(datetime)",
+        ".published::text"
+      ]
+    },
+    {
+      "name": "Camer.be",
+      "url": "https://www.camer.be/",
+      "country": "Cameroon",
+      "language": "fr",
+      "category": "general_news",
+      "priority": "medium",
+      "title_selectors": [
+        "h1::text",
+        ".title::text"
+      ],
+      "text_selectors": [
+        ".content p::text",
+        "article p::text"
+      ]
+    },
+    {
+      "name": "237actu",
+      "url": "https://237actu.com/",
+      "country": "Cameroon",
+      "language": "fr",
+      "category": "general_news",
+      "priority": "medium",
+      "title_selectors": [
+        "h1::text",
+        ".entry-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text",
+        ".post-content p::text"
+      ]
+    },
+    {
+      "name": "Actu Cameroun",
+      "url": "https://actucameroun.com/",
+      "country": "Cameroon",
+      "language": "fr",
+      "category": "general_news",
+      "priority": "medium",
+      "title_selectors": [
+        "h1.entry-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text"
+      ],
+      "article_link_selectors": [
+        ".entry-title a::attr(href)"
+      ]
+    },
+    {
+      "name": "Cameroon News Agency",
+      "url": "https://www.cna.cm/",
+      "country": "Cameroon",
+      "language": "en",
+      "category": "official_news",
+      "priority": "very_high",
+      "description": "Official government news agency",
+      "title_selectors": [
+        "h1::text",
+        ".article-title::text"
+      ],
+      "text_selectors": [
+        ".article-content p::text",
+        "article p::text"
+      ]
+    },
+    {
+      "name": "Business in Cameroon",
+      "url": "https://www.businessincameroon.com/",
+      "country": "Cameroon",
+      "language": "en",
+      "category": "business_news",
+      "priority": "high",
+      "title_selectors": [
+        "h1.entry-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text"
+      ]
+    },
+    {
+      "name": "Cameroon Intelligence Report",
+      "url": "https://www.cameroonintelligencereport.com/",
+      "country": "Cameroon",
+      "language": "en",
+      "category": "political_news",
+      "priority": "very_high",
+      "description": "Political and security intelligence reporting",
+      "title_selectors": [
+        "h1.entry-title::text"
+      ],
+      "text_selectors": [
+        ".entry-content p::text"
+      ]
+    }
+  ],
+  "global_settings": {
+    "respect_robots_txt": true,
+    "download_delay": 3,
+    "max_articles_per_source": 50,
+    "min_article_length": 100,
+    "languages": ["en", "fr"],
+    "update_frequency": "hourly"
+  },
+  "metadata": {
+    "version": "1.0",
+    "created": "2024-08-27",
+    "description": "News sources configuration for Project Sentinel OSINT collection",
+    "classification": "RESTRICTED",
+    "authority": "Cameroon Defense Force"
+  }
+}
