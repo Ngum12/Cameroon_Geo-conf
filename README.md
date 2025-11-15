@@ -9,15 +9,9 @@
 [![React 18+](https://img.shields.io/badge/react-18+-blue.svg)](https://reactjs.org/)
 [![Django 4.0+](https://img.shields.io/badge/django-4.0+-green.svg)](https://www.djangoproject.com/)
 
+
 **Live Demo:** [http://84.8.130.72/](http://84.8.130.72/) | **Video Demo:** [Google Drive](https://drive.google.com/drive/folders/13mxxrr5nzaAYpsc-JeaeTKmWczpunvNp) | **Documentation:** [Capstone Report](https://docs.google.com/document/d/1BxxTHTJQkycW5hEtv0u-Ho4KLz545YMbWj4ClxEzhFw/edit)
 
-</div>
-<img width="2557" height="1344" alt="Image" src="https://github.com/user-attachments/assets/3008ebd2-a896-4ba4-8db5-faa61acdc1d1" />
-
-
-| ![Image 1](https://github.com/user-attachments/assets/c4b64b3b-73ce-4119-863e-0bc64ecce106) | ![Image 2](https://github.com/user-attachments/assets/612bc0f5-f453-4e77-a3d2-8dc9651ada1e) |
-|:--:|:--:|
-| **Geospatial Intelligence View** | **Threat Intelligence Center View** |
 
 ## TABLE OF CONTENTS
 
@@ -36,6 +30,14 @@
 ### Project Description
 
 Project Sentinel is an advanced AI-powered threat intelligence and defense integration system designed specifically for Cameroon's security landscape. The system provides real-time threat monitoring, predictive analytics, and geospatial intelligence to enhance national security capabilities across all 10 regions.
+
+</div>
+<img width="2557" height="1344" alt="Image" src="https://github.com/user-attachments/assets/3008ebd2-a896-4ba4-8db5-faa61acdc1d1" />
+
+
+| ![Image 1](https://github.com/user-attachments/assets/c4b64b3b-73ce-4119-863e-0bc64ecce106) | ![Image 2](https://github.com/user-attachments/assets/612bc0f5-f453-4e77-a3d2-8dc9651ada1e) |
+|:--:|:--:|
+| **Geospatial Intelligence View** | **Threat Intelligence Center View** |
 
 ### Problem Statement
 
