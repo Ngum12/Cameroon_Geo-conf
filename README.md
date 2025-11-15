@@ -435,11 +435,21 @@ The project underwent comprehensive testing across multiple strategies, data var
 | Ouest | 810 | 93.5% | <560ms |
 | Sud | 770 | 93.1% | <540ms |
 
-<div align="center">
-<img src="images/11_prediction_accuracy_by_region.png" alt="Regional Coverage" width="70%"/>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="images/StaticShot_11-11-2025_16-38-22.png" width="100%">
+      <br>
+      <em>Figure 5A: System Prediction Snapshot</em>
+    </td>
+    <td align="center" width="50%">
+      <img src="images/11_prediction_accuracy_by_region.png" width="100%">
+      <br>
+      <em>Figure 5B: Interactive Geospatial Map - All 10 Regions of Cameroon</em>
+    </td>
+  </tr>
+</table>
 
-*Figure 5: Interactive Geospatial Map - All 10 Regions of Cameroon*
-</div>
 
 ### Performance Testing on Different Hardware/Specifications
 
