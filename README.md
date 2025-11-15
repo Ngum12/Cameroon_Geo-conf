@@ -402,11 +402,21 @@ The project underwent comprehensive testing across multiple strategies, data var
 
 **Overall Performance: 94.2% Accuracy (Exceeded 90% target)**
 
-<div align="center">
-<img src="images/02_nlp_accuracy_by_component.png" alt="AI Classification" width="70%"/>
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/StaticShot_13-11-2025_07-30-04.png" width="90%">
+      <br>
+      <em>Figure 1: System Overview</em>
+    </td>
+    <td align="center">
+      <img src="images/02_nlp_accuracy_by_component.png" width="90%">
+      <br>
+      <em>Figure 4: AI-Powered Threat Classification - 94.2% Accuracy</em>
+    </td>
+  </tr>
+</table>
 
-*Figure 4: AI-Powered Threat Classification - 94.2% Accuracy*
-</div>
 
 #### Geospatial Intelligence Testing
 
