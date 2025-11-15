@@ -1226,6 +1226,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 </div>
 ```
-#   U p d a t e   t o   r e f r e s h   G i t H u b   d i s p l a y 
- 
- 
