@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🛡️ PROJECT SENTINEL - SECURE .GITIGNORE
 # Cameroon Defense Force - Intelligence Platform
 # Excludes sensitive data, heavy libraries, and build artifacts
@@ -142,3 +143,51 @@
 #  KUBERNETES SECRETS - NEVER COMMIT
 backend-api/kubernetes/secrets.yaml
 **/kubernetes/secrets.yaml
+=======
+# Large files and binaries
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.backup
+*.sql
+*.pkl
+*.tar.gz
+*.zip
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Model files
+*.h5
+*.pb
+*.onnx
+*.joblib
+
+# Database files
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+dist/
+build/
+>>>>>>> 50fc18435bfafcd474be196c3982a63bea238187
