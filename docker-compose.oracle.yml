@@ -1,0 +1,247 @@
+version: '3.8'
+
+# ORACLE CLOUD OPTIMIZED DOCKER COMPOSE
+# For VM.Standard.E2.1.Micro (1GB RAM)
+# Optimized for low memory usage
+
+services:
+  # PostgreSQL Database with PostGIS - Optimized for 1GB RAM
+  postgres:
+    image: postgis/postgis:15-3.3-alpine  # Alpine for smaller footprint
+    container_name: sentinel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel_db}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_password}
+      # Memory optimization
+      POSTGRES_SHARED_BUFFERS: 128MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 256MB
+      POSTGRES_WORK_MEM: 4MB
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentinel_user} -d ${POSTGRES_DB:-sentinel_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Redis Cache - Optimized
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --appendonly yes
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  # Django Backend API - Main Application
+  backend:
+    build:
+      context: ./backend-api
+      dockerfile: Dockerfile.prod
+    container_name: sentinel-backend
+    restart: unless-stopped
+    environment:
+      # Django
+      DJANGO_SETTINGS_MODULE: sentinel_core.settings
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: ${DJANGO_DEBUG:-False}
+      ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      
+      # Database
+      DB_ENGINE: django.contrib.gis.db.backends.postgis
+      DB_NAME: ${POSTGRES_DB:-sentinel_db}
+      DB_USER: ${POSTGRES_USER:-sentinel_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      
+      # Redis
+      REDIS_URL: redis://redis:6379/0
+      
+      # External ML Services (on VM Instance 2)
+      ML_PREDICTION_API_URL: ${ML_API_URL:-http://localhost:8001}
+      NLP_TRANSLATION_URL: ${NLP_TRANSLATION_URL:-http://localhost:8004}
+      NLP_NER_URL: ${NLP_NER_URL:-http://localhost:8005}
+      
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      
+      # Twilio
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      TWILIO_WHATSAPP_NUMBER: ${TWILIO_WHATSAPP_NUMBER}
+      
+    ports:
+      - '8000:8000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend-api:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    command: >
+      sh -c "
+        echo 'Waiting for database...';
+        python manage.py wait_for_db;
+        
+        echo 'Running migrations...';
+        python manage.py migrate --noinput;
+        
+        echo 'Collecting static files...';
+        python manage.py collectstatic --noinput;
+        
+        echo 'Starting Gunicorn server...';
+        gunicorn sentinel_core.wsgi:application \
+          --bind 0.0.0.0:8000 \
+          --workers 2 \
+          --threads 2 \
+          --worker-class gthread \
+          --worker-tmp-dir /dev/shm \
+          --max-requests 1000 \
+          --max-requests-jitter 50 \
+          --timeout 60 \
+          --access-logfile - \
+          --error-logfile - \
+          --log-level info
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
+
+  # Human Interface API - Decision Support
+  human-interface:
+    build:
+      context: ./human-in-loop
+      dockerfile: Dockerfile
+    container_name: sentinel-human-interface
+    restart: unless-stopped
+    environment:
+      DB_PATH: /app/data/sentinel_decisions.db
+      BACKEND_API_URL: http://backend:8000
+    ports:
+      - '8003:8000'
+    volumes:
+      - ./human-in-loop:/app
+      - human_data:/app/data
+    command: uvicorn human_interface_api:app --host 0.0.0.0 --port 8000 --workers 1
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # RL Intervention System
+  rl-system:
+    build:
+      context: ./rl-system
+      dockerfile: Dockerfile
+    container_name: sentinel-rl-system
+    restart: unless-stopped
+    environment:
+      BACKEND_API_URL: http://backend:8000
+    ports:
+      - '8002:8000'
+    volumes:
+      - ./rl-system:/app
+      - rl_models:/app/models
+    command: uvicorn rl_system_api:app --host 0.0.0.0 --port 8000 --workers 1
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # Frontend Dashboard - React/Vite
+  frontend:
+    build:
+      context: ./frontend-dashboard
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: http://${PUBLIC_IP:-localhost}:8000
+        VITE_ML_API_URL: ${ML_API_URL:-http://localhost:8001}
+    container_name: sentinel-frontend
+    restart: unless-stopped
+    ports:
+      - '5173:80'
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  static_volume:
+    driver: local
+  media_volume:
+    driver: local
+  human_data:
+    driver: local
+  rl_models:
+    driver: local
+
+networks:
+  default:
+    name: sentinel-network
+    driver: bridge
+
+
+
+

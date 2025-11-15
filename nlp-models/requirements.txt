@@ -1,0 +1,25 @@
+# Project Sentinel NLP Services Requirements
+# Translation and NER services
+
+# Core AI/ML libraries
+torch>=2.0.0
+transformers>=4.30.0
+tokenizers>=0.13.0
+sentencepiece>=0.1.99
+
+# FastAPI and web service
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pydantic>=2.0.0
+
+# Additional utilities
+numpy>=1.24.0
+requests>=2.31.0
+python-multipart>=0.0.6
+
+# Language detection
+langdetect>=1.0.9
+
+# Development/testing
+pytest>=7.4.0
+httpx>=0.24.0

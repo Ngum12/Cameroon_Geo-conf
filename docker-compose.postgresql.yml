@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Project Sentinel
+  postgres:
+    image: postgres:15-alpine
+    container_name: sentinel-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: sentinel_defense
+      POSTGRES_USER: sentinel_admin
+      POSTGRES_PASSWORD: CameroonDefense2025!
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d/
+    networks:
+      - sentinel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel_admin -d sentinel_defense"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sentinel-network
+    command: redis-server --appendonly yes --requirepass "SentinelRedis2025!"
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sentinel-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sentinel.cm
+      PGADMIN_DEFAULT_PASSWORD: SentinelAdmin2025!
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - sentinel-network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  sentinel-network:
+    driver: bridge
+

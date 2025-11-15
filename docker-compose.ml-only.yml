@@ -1,0 +1,112 @@
+version: '3.8'
+
+# ORACLE CLOUD ML SERVICES ONLY
+# For VM Instance 2 - Dedicated to ML/NLP Services
+# Optimized for 1GB RAM
+
+services:
+  # ML Prediction API - Threat Classification & Conflict Prediction
+  ml-prediction:
+    build:
+      context: ./ml-models
+      dockerfile: Dockerfile
+    container_name: sentinel-ml-prediction
+    restart: unless-stopped
+    environment:
+      MODEL_PATH: /app/models
+      CACHE_SIZE: 100
+      MAX_WORKERS: 2
+    ports:
+      - '8001:8000'
+    volumes:
+      - ./ml-models:/app
+      - ml_models:/app/models
+    command: uvicorn prediction_api:app --host 0.0.0.0 --port 8000 --workers 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
+
+  # NLP Translation Service - French/English Translation
+  nlp-translation:
+    build:
+      context: ./nlp-models
+      dockerfile: Dockerfile
+    container_name: sentinel-translation
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: facebook/m2m100_418M
+      MAX_LENGTH: 512
+      DEVICE: cpu
+    ports:
+      - '8004:8000'
+    volumes:
+      - ./nlp-models:/app
+      - translation_cache:/root/.cache/huggingface
+    command: uvicorn translation_service_cpu:app --host 0.0.0.0 --port 8000 --workers 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Translation models take longer to load
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 384M
+
+  # NLP NER Service - Named Entity Recognition
+  nlp-ner:
+    build:
+      context: ./nlp-models
+      dockerfile: Dockerfile.ner
+    container_name: sentinel-ner
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: xlm-roberta-large-finetuned-conll03-english
+      DEVICE: cpu
+    ports:
+      - '8005:8000'
+    volumes:
+      - ./nlp-models:/app
+      - ner_cache:/root/.cache/huggingface
+    command: uvicorn ner_service:app --host 0.0.0.0 --port 8000 --workers 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
+
+volumes:
+  ml_models:
+    driver: local
+  translation_cache:
+    driver: local
+  ner_cache:
+    driver: local
+
+networks:
+  default:
+    name: sentinel-ml-network
+    driver: bridge
+
+
+
+

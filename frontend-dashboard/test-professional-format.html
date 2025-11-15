@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Message Format Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #00ff88;
+        }
+        h1 {
+            text-align: center;
+            color: #ff1744;
+            text-shadow: 0 0 10px #ff1744;
+        }
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .message-box {
+            background: #2a2a3e;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ff9800;
+        }
+        .old-format {
+            border-left-color: #f44336;
+        }
+        .new-format {
+            border-left-color: #4caf50;
+        }
+        .message-content {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        button {
+            background: #ff1744;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        button:hover {
+            background: #d50000;
+            transform: scale(1.02);
+        }
+        .success-btn {
+            background: #4caf50;
+        }
+        .success-btn:hover {
+            background: #388e3c;
+        }
+        .benefits {
+            background: #3a3a5e;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border-left: 4px solid #2196f3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 PROFESSIONAL MESSAGE FORMAT</h1>
+        
+        <div class="benefits">
+            <h3>✅ New Professional Format Benefits:</h3>
+            <ul>
+                <li><strong>Concise:</strong> Key information at a glance</li>
+                <li><strong>Structured:</strong> Emojis for visual organization</li>
+                <li><strong>Professional:</strong> Clean, military-style formatting</li>
+                <li><strong>Mobile-Friendly:</strong> Shorter, easier to read on phones</li>
+                <li><strong>Branded:</strong> "Harmony Flow" branding consistent</li>
+            </ul>
+        </div>
+
+        <div class="comparison">
+            <div class="message-box old-format">
+                <h3>❌ Old Format (Too Long)</h3>
+                <div class="message-content">🚨 CAMEROON DEFENSE FORCE - CRITICAL THREAT ALERT
+
+THREAT SUMMARY:
+VERIFIED THREAT: 🚨 IMMINENT THREAT - BORDER INCURSION DETECTED
+
+REGION: Far North
+THREAT LEVEL: 94%
+VERIFICATION: HUMAN EXPERT VERIFIED
+
+DETAILS:
+HUMAN VERIFIED: 🔥 IMMINENT THREAT: Large armed group crossing Chad-Cameroon border. Satellite confirms 25+ personnel with vehicles. IMMEDIATE MILITARY RESPONSE REQUIRED. Escalation protocols ACTIVE.
+
+Analyst Confidence: 5/5
+Notes: 
+
+PRIORITY: IMMEDIATE RESPONSE REQUIRED
+TIME: 10/4/2025, 3:24:48 PM
+
+This alert has been verified by human intelligence analyst.
+
+Project Sentinel Defense Intelligence Platform
+Cameroon Defense Force</div>
+            </div>
+
+            <div class="message-box new-format">
+                <h3>✅ New Format (Professional)</h3>
+                <div class="message-content">🚨🇨🇲 HARMONY FLOW ALERT
+
+🎯 THREAT: 🚨 IMMINENT THREAT - BORDER INCURSION DETECTED
+📊 LEVEL: CRITICAL (94%)
+📍 REGION: Far North
+
+HUMAN VERIFIED: 🔥 IMMINENT THREAT: Large armed group crossing Chad-Cameroon border. Satellite confirms 25+ personnel with vehicles. IMMEDIATE MILITARY RESPONSE REQUIRED...
+
+⚠️ HUMAN VERIFIED - Immediate response required
+
+👤 TO: Defense Command Center
+🕒 10/4/2025, 3:24:48 PM
+
+🛡️ Harmony Flow Defense System</div>
+            </div>
+        </div>
+
+        <button onclick="testNewFormat()" class="success-btn">📱 TEST NEW PROFESSIONAL FORMAT</button>
+        <button onclick="showComparison()">📊 SHOW DETAILED COMPARISON</button>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        async function testNewFormat() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<div style="background: #2a2a3e; padding: 20px; border-radius: 8px; margin-top: 20px;"><h3>🧪 Testing New Professional Format...</h3><div id="log" style="background: #000; color: #0f0; padding: 15px; border-radius: 5px; font-family: monospace; white-space: pre-wrap;"></div></div>';
+            
+            const log = document.getElementById('log');
+            
+            function addLog(message) {
+                log.textContent += new Date().toLocaleTimeString() + ' - ' + message + '\n';
+            }
+            
+            addLog('📱 Sending professional format SMS...');
+            
+            try {
+                const response = await fetch('/api/v1/twilio/send-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        to: '+250792104982',
+                        body: `🚨🇨🇲 HARMONY FLOW ALERT
+
+🎯 THREAT: Professional Format Test
+📊 LEVEL: HIGH (85%)
+📍 REGION: Test Environment
+
+Testing the new professional message format for the Communications Hub. This format is concise, structured, and mobile-friendly.
+
+⚠️ FORMAT TEST - New professional layout
+
+👤 TO: Defense Command Center
+🕒 ${new Date().toLocaleString()}
+
+🛡️ Harmony Flow Defense System`,
+                        channel: 'sms'
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    addLog(`✅ SMS sent successfully!`);
+                    addLog(`   SID: ${result.sid}`);
+                    addLog(`   Status: ${result.status}`);
+                    addLog('📱 Check your phone for the new professional format!');
+                } else {
+                    const error = await response.json();
+                    addLog(`❌ SMS failed: ${error.error}`);
+                }
+
+            } catch (error) {
+                addLog(`❌ Test error: ${error.message}`);
+            }
+        }
+
+        function showComparison() {
+            const output = document.getElementById('output');
+            output.innerHTML = `
+                <div style="background: #2a2a3e; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <h3>📊 Format Comparison Analysis</h3>
+                    <div style="background: #3a3a5e; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <h4>📏 Length Comparison:</h4>
+                        <ul>
+                            <li><strong>Old Format:</strong> ~450 characters (too long for SMS)</li>
+                            <li><strong>New Format:</strong> ~250 characters (optimal for SMS)</li>
+                            <li><strong>Reduction:</strong> 44% shorter, more readable</li>
+                        </ul>
+                    </div>
+                    <div style="background: #3a3a5e; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                        <h4>🎯 Key Improvements:</h4>
+                        <ul>
+                            <li>🚨🇨🇲 <strong>Harmony Flow branding</strong> instead of generic</li>
+                            <li>📊 <strong>Visual icons</strong> for quick scanning</li>
+                            <li>📱 <strong>Mobile-optimized</strong> length and structure</li>
+                            <li>⚠️ <strong>Clear status indicators</strong> (HUMAN VERIFIED vs SYSTEM ESCALATED)</li>
+                            <li>🛡️ <strong>Consistent branding</strong> with platform name</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Auto-load message
+        window.addEventListener('load', () => {
+            console.log('📱 Professional Message Format Test Loaded');
+        });
+    </script>
+</body>
+</html>

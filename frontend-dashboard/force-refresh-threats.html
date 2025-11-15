@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Force Refresh Threats</title>
+</head>
+<body>
+    <h1>🔄 Force Refresh Threat Data</h1>
+    <p>This will force the frontend to reload with real data...</p>
+    
+    <script>
+        // Clear any cached data
+        if (typeof(Storage) !== "undefined") {
+            localStorage.clear();
+            sessionStorage.clear();
+        }
+        
+        // Force reload the main application
+        setTimeout(() => {
+            window.location.href = 'http://localhost:3000/';
+        }, 1000);
+        
+        console.log('🔄 Clearing cache and redirecting to main app...');
+    </script>
+</body>
+</html>

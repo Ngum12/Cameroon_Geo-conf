@@ -1,0 +1,67 @@
+# 🧠 REINFORCEMENT LEARNING SYSTEM - SECURITY .GITIGNORE
+# Exclude trained models, checkpoints, and heavy ML artifacts
+
+# Trained Models
+models/
+*.model
+*.pkl
+*.joblib
+*.h5
+*.pb
+*.onnx
+*.pt
+*.pth
+
+# Training artifacts
+checkpoints/
+logs/
+runs/
+tensorboard_logs/
+wandb/
+
+# Data files
+data/
+datasets/
+*.csv
+*.json
+!config*.json
+!sample*.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Keep source code and configs
+!*.py
+!requirements.txt
+!README.md
+!config/
+!scripts/

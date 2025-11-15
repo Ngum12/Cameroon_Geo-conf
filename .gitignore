@@ -1,0 +1,144 @@
+# 🛡️ PROJECT SENTINEL - SECURE .GITIGNORE
+# Cameroon Defense Force - Intelligence Platform
+# Excludes sensitive data, heavy libraries, and build artifacts
+
+# ========================================
+# 🚨 SECURITY - NEVER COMMIT THESE
+# ========================================
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+.env*
+**/secrets/
+**/keys/
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/passwords.txt
+**/credentials.json
+**/config/production.json
+**/sensitive_data/
+**/.secrets/
+
+# ========================================
+# 📚 HEAVY LIBRARIES & DEPENDENCIES
+# ========================================
+**/node_modules/
+**/venv/
+**/env/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+**/build/
+**/dist/
+**/.next/
+**/.nuxt/
+**/out/
+
+# ========================================
+# 🤖 ML MODELS & TRAINING DATA
+# ========================================
+**/*.model
+**/*.pkl
+**/*.joblib
+**/*.h5
+**/*.pb
+**/*.onnx
+**/models/pretrained/
+**/models/checkpoints/
+**/data/raw/
+**/data/processed/
+**/datasets/large/
+**/*.csv
+**/*.json
+!**/sample*.json
+!**/config*.json
+
+# ========================================
+# 🗃️ DATABASE & CACHE FILES
+# ========================================
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/db.sqlite3
+**/*.log
+**/logs/
+**/.cache/
+**/cache/
+**/.tmp/
+**/tmp/
+
+# ========================================
+# 🔧 IDE & SYSTEM FILES
+# ========================================
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/*.swo
+**/*~
+.history/
+
+# ========================================
+# 📦 BUILD ARTIFACTS
+# ========================================
+**/coverage/
+**/.nyc_output/
+**/*.tgz
+**/*.tar.gz
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/lerna-debug.log*
+
+# ========================================
+# 🐳 DOCKER & DEPLOYMENT
+# ========================================
+**/.dockerignore
+**/docker-compose.override.yml
+**/Dockerfile.prod
+**/kubernetes/secrets/
+
+# ========================================
+# 📊 ACLED DATA (KEEP ONLY SAMPLES)
+# ========================================
+**/acled-processor/cameroon_conflict_data_processed.json
+**/acled-processor/cameroon_events_ml_ready.json
+**/acled-processor/*.csv
+
+# ========================================
+# 🎯 FRONTEND SPECIFIC
+# ========================================
+**/frontend-dashboard/node_modules/iiicd pretrained
+**/frontend-dashboard/build/
+**/frontend-dashboard/dist/
+**/frontend-dashboard/.env.local
+
+# ========================================
+# 🧠 ML/RL MODELS
+# ========================================
+**/ml-models/models/
+**/rl-system/models/
+**/rl-system/checkpoints/
+**/rl-system/logs/
+
+# ========================================
+# 📰 NEWS COLLECTOR CACHE
+# ========================================
+**/news-collector/cache/
+**/news-collector/downloaded/
+
+# Keep important config files
+!**/README.md
+!**/requirements.txt
+!**/package.json
+!**/package-lock.json
+!**/.gitkeep
+#  KUBERNETES SECRETS - NEVER COMMIT
+backend-api/kubernetes/secrets.yaml
+**/kubernetes/secrets.yaml

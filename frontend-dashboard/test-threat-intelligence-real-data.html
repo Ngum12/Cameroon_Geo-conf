@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Threat Intelligence - Real Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: #2d2d2d;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .success { border-left-color: #28a745; }
+        .error { border-left-color: #dc3545; }
+        .warning { border-left-color: #ffc107; }
+        pre {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .threat-card {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .threat-high { border-left-color: #dc3545; }
+        .threat-medium { border-left-color: #ffc107; }
+        .threat-low { border-left-color: #28a745; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Threat Intelligence Service - Real Data Test</h1>
+        
+        <div class="test-section">
+            <h2>📡 API Data Test</h2>
+            <button onclick="testEventsAPI()">Test Events API</button>
+            <button onclick="testStatisticsAPI()">Test Statistics API</button>
+            <div id="api-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🧠 Threat Intelligence Processing Test</h2>
+            <button onclick="testThreatIntelligence()">Test Threat Intelligence Service</button>
+            <div id="threat-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 Regional Threat Analysis</h2>
+            <div id="regional-analysis"></div>
+        </div>
+    </div>
+
+    <script>
+        // Test Events API
+        async function testEventsAPI() {
+            const resultsDiv = document.getElementById('api-results');
+            resultsDiv.innerHTML = '<p>🔄 Testing Events API...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/events/');
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Events API Success</h3>
+                        <p><strong>Total Articles:</strong> ${data.features?.length || 0}</p>
+                        <p><strong>System:</strong> ${data.metadata?.system || 'Unknown'}</p>
+                        <p><strong>Data Source:</strong> ${data.metadata?.data_source || 'Unknown'}</p>
+                        <h4>Sample Articles:</h4>
+                        <pre>${JSON.stringify(data.features?.slice(0, 3), null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Events API Failed</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Test Statistics API
+        async function testStatisticsAPI() {
+            const resultsDiv = document.getElementById('api-results');
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/statistics/');
+                const data = await response.json();
+                
+                resultsDiv.innerHTML += `
+                    <div class="success">
+                        <h3>✅ Statistics API Success</h3>
+                        <p><strong>Total Articles:</strong> ${data.overview?.total_articles || 0}</p>
+                        <p><strong>Processed:</strong> ${data.overview?.processed_articles || 0}</p>
+                        <p><strong>Sources:</strong> ${data.by_source?.length || 0}</p>
+                        <h4>Top Sources:</h4>
+                        <pre>${JSON.stringify(data.by_source?.slice(0, 5), null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML += `
+                    <div class="error">
+                        <h3>❌ Statistics API Failed</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Simplified Threat Intelligence Processing
+        async function testThreatIntelligence() {
+            const resultsDiv = document.getElementById('threat-results');
+            resultsDiv.innerHTML = '<p>🔄 Testing Threat Intelligence Processing...</p>';
+            
+            try {
+                // Load real data from API
+                const response = await fetch('http://localhost:8000/api/v1/events/');
+                const eventsData = await response.json();
+                
+                console.log('📊 Raw API Data:', eventsData);
+                
+                if (!eventsData.features || eventsData.features.length === 0) {
+                    resultsDiv.innerHTML = `
+                        <div class="warning">
+                            <h3>⚠️ No Articles Found</h3>
+                            <p>API returned no articles. Using baseline data.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Process articles by region
+                const regionalThreats = processArticlesByRegion(eventsData.features);
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Threat Intelligence Processing Success</h3>
+                        <p><strong>Articles Processed:</strong> ${eventsData.features.length}</p>
+                        <p><strong>Regional Threats Generated:</strong> ${regionalThreats.length}</p>
+                    </div>
+                `;
+
+                // Display regional analysis
+                displayRegionalAnalysis(regionalThreats);
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Threat Intelligence Failed</h3>
+                        <p>${error.message}</p>
+                        <pre>${error.stack}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        // Simplified article processing
+        function processArticlesByRegion(articles) {
+            const regions = ['Extreme-Nord', 'Sud-Ouest', 'Nord-Ouest', 'Centre', 'Littoral', 'Nord', 'Adamaoua', 'Est', 'Sud', 'Ouest'];
+            const regionalThreats = [];
+
+            // Group articles by region
+            const articlesByRegion = {};
+            regions.forEach(region => articlesByRegion[region] = []);
+
+            articles.forEach(article => {
+                const title = article.properties?.title || '';
+                const description = article.properties?.description || '';
+                const content = title + ' ' + description;
+
+                // Find matching region
+                let matchedRegion = 'Centre'; // Default
+                for (const region of regions) {
+                    if (content.toLowerCase().includes(region.toLowerCase()) || 
+                        content.toLowerCase().includes(region.replace('-', ' ').toLowerCase())) {
+                        matchedRegion = region;
+                        break;
+                    }
+                }
+
+                articlesByRegion[matchedRegion].push(article);
+            });
+
+            // Generate threat data for each region
+            regions.forEach(region => {
+                const regionArticles = articlesByRegion[region];
+                const threatLevel = calculateThreatLevel(region, regionArticles);
+                
+                regionalThreats.push({
+                    id: `threat-${region}`,
+                    region: region,
+                    threatLevel: threatLevel,
+                    articleCount: regionArticles.length,
+                    articles: regionArticles.slice(0, 3), // Sample articles
+                    aiConfidence: regionArticles.length > 0 ? 85 : 70,
+                    lastUpdate: new Date(),
+                    prediction7d: threatLevel + 2,
+                    prediction30d: threatLevel + 5
+                });
+            });
+
+            return regionalThreats;
+        }
+
+        // Calculate threat level based on articles
+        function calculateThreatLevel(region, articles) {
+            if (articles.length === 0) {
+                // Baseline threat levels
+                const baselines = {
+                    'Extreme-Nord': 75, 'Sud-Ouest': 65, 'Nord-Ouest': 60,
+                    'Est': 55, 'Nord': 45, 'Centre': 40, 'Adamaoua': 35,
+                    'Littoral': 30, 'Ouest': 30, 'Sud': 25
+                };
+                return baselines[region] || 40;
+            }
+
+            // Calculate based on real articles
+            let threatScore = 40; // Base
+            
+            articles.forEach(article => {
+                const title = article.properties?.title || '';
+                const priority = article.properties?.priority || 2;
+                
+                // Increase threat based on keywords
+                if (title.toLowerCase().includes('security') || 
+                    title.toLowerCase().includes('crisis') ||
+                    title.toLowerCase().includes('conflict')) {
+                    threatScore += 15;
+                }
+                
+                if (title.toLowerCase().includes('terrorism') ||
+                    title.toLowerCase().includes('attack')) {
+                    threatScore += 25;
+                }
+                
+                // Priority adjustment
+                threatScore += (5 - priority) * 5;
+            });
+
+            return Math.min(100, Math.max(20, threatScore));
+        }
+
+        // Display regional analysis
+        function displayRegionalAnalysis(regionalThreats) {
+            const analysisDiv = document.getElementById('regional-analysis');
+            
+            let html = '<h3>🎯 Regional Threat Analysis Results</h3>';
+            
+            regionalThreats.forEach(threat => {
+                const threatClass = threat.threatLevel >= 70 ? 'threat-high' : 
+                                 threat.threatLevel >= 50 ? 'threat-medium' : 'threat-low';
+                
+                html += `
+                    <div class="threat-card ${threatClass}">
+                        <h4>${threat.region}</h4>
+                        <p><strong>Threat Level:</strong> ${threat.threatLevel}%</p>
+                        <p><strong>Articles:</strong> ${threat.articleCount}</p>
+                        <p><strong>AI Confidence:</strong> ${threat.aiConfidence}%</p>
+                        <p><strong>7-day Prediction:</strong> ${threat.prediction7d}%</p>
+                        ${threat.articles.length > 0 ? `
+                            <details>
+                                <summary>Sample Articles (${threat.articles.length})</summary>
+                                <pre>${JSON.stringify(threat.articles, null, 2)}</pre>
+                            </details>
+                        ` : '<p><em>No articles for this region</em></p>'}
+                    </div>
+                `;
+            });
+            
+            analysisDiv.innerHTML = html;
+        }
+
+        // Auto-run tests on page load
+        window.onload = function() {
+            console.log('🛡️ Threat Intelligence Test Page Loaded');
+            testEventsAPI();
+        };
+    </script>
+</body>
+</html>

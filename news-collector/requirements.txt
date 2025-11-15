@@ -1,0 +1,56 @@
+# PROJECT SENTINEL - NEWS COLLECTION SYSTEM
+# Cameroon Defense Force OSINT Intelligence Platform
+
+# Web Scraping & HTTP
+scrapy==2.11.0
+selenium==4.15.0
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# RSS & Feed Processing
+feedparser==6.0.10
+python-dateutil==2.8.2
+
+# Data Processing
+pandas==2.1.4
+numpy==1.24.3
+
+# Database & Storage
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# Async Processing
+asyncio==3.4.3
+aiohttp==3.9.1
+celery==5.3.4
+redis==5.0.1
+
+# Text Processing
+textstat==0.7.3
+langdetect==1.0.9
+python-readability==0.1
+
+# Logging & Monitoring
+structlog==23.2.0
+sentry-sdk==1.38.0
+
+# Utilities
+pydantic==2.5.0
+python-decouple==3.8
+schedule==1.2.0
+tqdm==4.66.1
+
+# Browser Automation (for dynamic sites)
+webdriver-manager==4.0.1
+undetected-chromedriver==3.5.4
+
+# Content Deduplication
+simhash==2.1.2
+Levenshtein==0.23.0
+
+# Geopolitical Analysis
+pycountry==23.12.7
+geopy==2.4.1
+
+

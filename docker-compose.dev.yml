@@ -1,0 +1,158 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with PostGIS
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_DB: sentinel_db
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: secure_password_123
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # Translation NLP Service
+  translation:
+    build:
+      context: ./nlp-models
+      dockerfile: Dockerfile
+    container_name: sentinel-translation
+    ports:
+      - '8001:8000'
+    environment:
+      - PORT=8000
+      - MODEL_NAME=facebook/m2m100_418M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # NER (Named Entity Recognition) Service
+  ner:
+    build:
+      context: ./nlp-models
+      dockerfile: Dockerfile.ner
+    container_name: sentinel-ner
+    ports:
+      - '8002:8000'
+    environment:
+      - PORT=8000
+      - MODEL_NAME=xlm-roberta-large-finetuned-conll03-english
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Django Backend API
+  backend:
+    build:
+      context: ./backend-api
+      dockerfile: Dockerfile
+    container_name: sentinel-backend
+    ports:
+      - '8000:8000'
+    environment:
+      - DEBUG=True
+      - DB_NAME=sentinel_db
+      - DB_USER=sentinel
+      - DB_PASSWORD=secure_password_123
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DJANGO_SECRET_KEY=cdf-sentinel-dev-secret-key-12345
+      - TRANSLATION_SERVICE_URL=http://translation:8000
+      - NER_SERVICE_URL=http://ner:8000
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      translation:
+        condition: service_healthy
+      ner:
+        condition: service_healthy
+    volumes:
+      - ./backend-api:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    command: >
+      sh -c "
+        echo 'Waiting for database...';
+        while ! nc -z postgres 5432; do sleep 1; done;
+        echo 'Database is ready!';
+        
+        echo 'Running migrations...';
+        python manage.py migrate;
+        
+        echo 'Collecting static files...';
+        python manage.py collectstatic --noinput;
+        
+        echo 'Starting Django development server...';
+        python manage.py runserver 0.0.0.0:8000;
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend-dashboard
+      dockerfile: Dockerfile
+    container_name: sentinel-frontend
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_MAPBOX_ACCESS_TOKEN=${MAPBOX_TOKEN:-pk.eyJ1IjoiZXhhbXBsZSIsImEiOiJjazA0a2ZkNGowNm4wM3FuZDN5NmNqNm8yIn0.dummy_token}
+      - VITE_APP_NAME=Project Sentinel
+      - VITE_APP_VERSION=1.0.0
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend-dashboard:/app
+      - /app/node_modules
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  static_volume:
+    driver: local
+  media_volume:
+    driver: local
+
+networks:
+  default:
+    name: sentinel-network
+    driver: bridge

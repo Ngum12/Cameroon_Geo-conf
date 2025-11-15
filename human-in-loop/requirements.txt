@@ -1,0 +1,53 @@
+# PROJECT SENTINEL - HUMAN-IN-THE-LOOP SYSTEM REQUIREMENTS
+# Cameroon Defense Force Human Oversight & Verification
+
+# Core Framework
+fastapi==0.105.0
+uvicorn[standard]==0.24.0
+pydantic==2.5.2
+sqlalchemy==2.0.25
+alembic==1.13.1
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Real-time Communications
+websockets==12.0
+redis==5.0.1
+celery==5.3.6
+
+# Database
+psycopg2-binary==2.9.9
+sqlite3
+
+# API Integration
+httpx==0.25.2
+requests==2.31.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.24.3
+python-dateutil==2.8.2
+
+# Notifications & Alerts
+twilio==8.11.1
+smtplib
+
+# Audit & Logging
+structlog==23.2.0
+python-json-logger==2.0.7
+
+# Workflow Management
+dramatiq==1.15.0
+
+# UI & Templates
+jinja2==3.1.2
+python-multipart==0.0.6
+
+# Utilities
+pytz==2023.3
+uuid
+enum34
+

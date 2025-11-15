@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Data Download Functionality</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff88;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .section {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #00ff88;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: linear-gradient(45deg, #00ff88 30%, #00cc6a 90%);
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: linear-gradient(45deg, #00cc6a 30%, #009955 90%);
+        }
+        button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .stats {
+            background: rgba(0,255,136,0.1);
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .log {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Data Download Functionality Test</h1>
+        
+        <div class="section">
+            <h2>📊 Backend Data Statistics</h2>
+            <div id="dataStats" class="stats">Loading...</div>
+            <button onclick="loadDataStats()">🔄 Refresh Stats</button>
+        </div>
+
+        <div class="section">
+            <h2>📥 Test Data Downloads</h2>
+            
+            <h3>JSON Format Downloads:</h3>
+            <button onclick="testDownload('json', '7d')">📄 JSON - 7 Days</button>
+            <button onclick="testDownload('json', '30d')">📄 JSON - 30 Days</button>
+            <button onclick="testDownload('json', 'all')">📄 JSON - All Data</button>
+            
+            <h3>CSV Format Downloads:</h3>
+            <button onclick="testDownload('csv', '7d')">📊 CSV - 7 Days</button>
+            <button onclick="testDownload('csv', '30d')">📊 CSV - 30 Days</button>
+            <button onclick="testDownload('csv', 'all')">📊 CSV - All Data</button>
+            
+            <h3>Excel Format Downloads:</h3>
+            <button onclick="testDownload('excel', '7d')">📈 Excel - 7 Days</button>
+            <button onclick="testDownload('excel', '30d')">📈 Excel - 30 Days</button>
+            <button onclick="testDownload('excel', 'all')">📈 Excel - All Data</button>
+        </div>
+
+        <div class="section">
+            <h2>📋 Test Log</h2>
+            <div id="testLog" class="log"></div>
+            <button onclick="clearLog()">🗑️ Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let isDownloading = false;
+
+        function log(message) {
+            const logElement = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').innerHTML = '';
+        }
+
+        async function loadDataStats() {
+            try {
+                log('🔍 Loading data statistics from backend...');
+                
+                const response = await fetch('http://localhost:8000/api/v1/statistics/');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const stats = await response.json();
+                
+                const statsHtml = `
+                    <strong>📊 Dataset Overview:</strong><br>
+                    • Total Articles: <span style="color: #00ff88">${stats.overview?.total_articles || 0}</span><br>
+                    • Processed: <span style="color: #00ff88">${stats.overview?.processed_articles || 0}</span><br>
+                    • Last 24h: <span style="color: #00ff88">${stats.overview?.recent_articles_24h || 0}</span><br>
+                    • Sources: <span style="color: #00ff88">${stats.by_source?.length || 0}</span><br>
+                    • Generated: <span style="color: #a0a0a0">${stats.generated_at || 'Unknown'}</span>
+                `;
+                
+                document.getElementById('dataStats').innerHTML = statsHtml;
+                log('✅ Data statistics loaded successfully');
+                
+            } catch (error) {
+                log(`❌ Failed to load statistics: ${error.message}`);
+                document.getElementById('dataStats').innerHTML = `<span style="color: #ff4444">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function testDownload(format, timeRange) {
+            if (isDownloading) {
+                log('⚠️ Download already in progress, please wait...');
+                return;
+            }
+
+            isDownloading = true;
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+
+            try {
+                log(`🚀 Starting ${format.toUpperCase()} download for ${timeRange} range...`);
+                
+                // Fetch data from backend
+                const response = await fetch(`http://localhost:8000/api/v1/events/?format=${format}&range=${timeRange}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                log(`📊 Received ${data.features?.length || 0} articles from backend`);
+                
+                // Create download content
+                let downloadContent;
+                let filename;
+                let mimeType;
+
+                const timestamp = new Date().toISOString().split('T')[0];
+
+                if (format === 'json') {
+                    downloadContent = JSON.stringify(data, null, 2);
+                    filename = `sentinel_data_${timeRange}_${timestamp}.json`;
+                    mimeType = 'application/json';
+                    log(`📄 Created JSON file: ${filename} (${downloadContent.length} characters)`);
+                } else if (format === 'csv') {
+                    // Convert to CSV
+                    if (data.features && data.features.length > 0) {
+                        const headers = ['id', 'title', 'region', 'threat_level', 'priority', 'timestamp', 'source', 'url'];
+                        const csvRows = [headers.join(',')];
+                        
+                        data.features.forEach((feature) => {
+                            const props = feature.properties || {};
+                            const row = [
+                                props.id || '',
+                                `"${(props.title || '').replace(/"/g, '""')}"`,
+                                props.region || '',
+                                props.threat_level || '',
+                                props.priority || '',
+                                props.timestamp || '',
+                                props.source || '',
+                                props.url || ''
+                            ];
+                            csvRows.push(row.join(','));
+                        });
+                        
+                        downloadContent = csvRows.join('\\n');
+                        log(`📊 Created CSV with ${csvRows.length - 1} data rows`);
+                    } else {
+                        downloadContent = 'No data available';
+                        log('⚠️ No data available for CSV export');
+                    }
+                    filename = `sentinel_data_${timeRange}_${timestamp}.csv`;
+                    mimeType = 'text/csv';
+                } else {
+                    // Excel format (simplified as JSON for now)
+                    downloadContent = JSON.stringify(data, null, 2);
+                    filename = `sentinel_data_${timeRange}_${timestamp}.xlsx`;
+                    mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                    log(`📈 Created Excel file: ${filename}`);
+                }
+
+                // Create and trigger download
+                const blob = new Blob([downloadContent], { type: mimeType });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+                log(`✅ Download completed: ${filename} (${(blob.size / 1024).toFixed(1)} KB)`);
+                
+            } catch (error) {
+                log(`❌ Download failed: ${error.message}`);
+            } finally {
+                isDownloading = false;
+                buttons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        // Load initial stats
+        window.addEventListener('load', () => {
+            log('🚀 Data download test page loaded');
+            loadDataStats();
+        });
+    </script>
+</body>
+</html>
