@@ -404,13 +404,13 @@ The project underwent comprehensive testing across multiple strategies, data var
 
 <table>
   <tr>
-    <td align="center">
-      <img src="images/StaticShot_13-11-2025_07-30-04.png" width="120%">
+    <td align="center" width="50%">
+      <img src="images/StaticShot_13-11-2025_07-30-04.png" width="100%">
       <br>
       <em>Figure 1: System Overview</em>
     </td>
-    <td align="center">
-      <img src="images/02_nlp_accuracy_by_component.png" width="70%">
+    <td align="center" width="50%">
+      <img src="images/02_nlp_accuracy_by_component.png" width="100%">
       <br>
       <em>Figure 4: AI-Powered Threat Classification - 94.2% Accuracy</em>
     </td>
