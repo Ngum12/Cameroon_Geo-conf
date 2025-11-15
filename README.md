@@ -554,7 +554,7 @@ The project underwent comprehensive testing across multiple strategies, data var
 **Security Score:** A+ (95/100)
 
 <div align="center">
-<img src="images/13_confusion_matrix_heatmap.png" alt="Security Dashboard" width="70%"/>
+<img src="images/StaticShot_27-10-2025_04-50-38.png" alt="Security Dashboard" width="70%"/>
 
 *Figure 8: Security Testing Dashboard - All Measures Validated*
 </div>
@@ -573,7 +573,7 @@ The project underwent comprehensive testing across multiple strategies, data var
 | External APIs ↔ Collectors | 100 API calls | <2s | 1.2% | PASS |
 
 <div align="center">
-<img src="images/12_prediction_accuracy_by_forecast_horizon.png" alt="API Integration" width="70%"/>
+<img src="images/StaticShot_27-10-2025_04-55-04.png" alt="API Integration" width="70%"/>
 
 *Figure 9: API Integration Status - All Services Connected*
 </div>
