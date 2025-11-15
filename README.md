@@ -59,7 +59,7 @@ Project Sentinel addresses these challenges through automated data collection fr
 | User Satisfaction | 85% | 90% | ✅ Exceeded |
 
 <div align="center">
-<img src="images/01_intelligence_collection_success_rate.png" alt="Project Sentinel Dashboard" width="100%"/>
+<img src="images/images/Overview (2).png" alt="Project Sentinel Dashboard" width="100%"/>
 
 *Figure 1: Project Sentinel Unified Intelligence Dashboard*
 </div>
@@ -69,6 +69,11 @@ Project Sentinel addresses these challenges through automated data collection fr
 ## SYSTEM ARCHITECTURE
 
 ### High-Level Architecture
+
+<div align="center">
+<img src="images/images/System Archrt.png" alt="Detailed Architecture" width="100%"/>
+
+*Figure 2: Detailed System Architecture *
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -117,9 +122,6 @@ Project Sentinel addresses these challenges through automated data collection fr
             │         (Port 3000)                │
             └────────────────────────────────────┘
 ```
-
-<div align="center">
-<img src="images/02_nlp_accuracy_by_component.png" alt="Detailed Architecture" width="100%"/>
 
 *Figure 2: Detailed System Architecture with Microservices*
 </div>
@@ -1226,3 +1228,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 </div>
 ```
+
