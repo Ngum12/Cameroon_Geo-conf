@@ -9,9 +9,7 @@
 [![React 18+](https://img.shields.io/badge/react-18+-blue.svg)](https://reactjs.org/)
 [![Django 4.0+](https://img.shields.io/badge/django-4.0+-green.svg)](https://www.djangoproject.com/)
 
-
 **Live Demo:** [http://84.8.130.72/](http://84.8.130.72/) | **Video Demo:** [Google Drive](https://drive.google.com/drive/folders/13mxxrr5nzaAYpsc-JeaeTKmWczpunvNp) | **Documentation:** [Capstone Report](https://docs.google.com/document/d/1BxxTHTJQkycW5hEtv0u-Ho4KLz545YMbWj4ClxEzhFw/edit)
-
 
 ## TABLE OF CONTENTS
 
@@ -23,7 +21,6 @@
 6. [Deployment Documentation](#deployment-documentation)
 7. [API Documentation](#api-documentation)
 8. [Team and Acknowledgments](#team-and-acknowledgments)
-
 
 ## OVERVIEW
 
