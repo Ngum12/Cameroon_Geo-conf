@@ -59,7 +59,7 @@ Project Sentinel addresses these challenges through automated data collection fr
 | User Satisfaction | 85% | 90% | ✅ Exceeded |
 
 <div align="center">
-<img src="images/Overview (2).png" alt="Project Sentinel Dashboard" width="100%"/>
+<img src="images/cameroon_alert_collage_with_overview.png" alt="Project Sentinel Dashboard" width="100%"/>
 
 *Figure 1: Project Sentinel Unified Intelligence Dashboard*
 </div>
